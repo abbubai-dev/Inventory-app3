@@ -28,7 +28,7 @@ const Login = ({ setUser }) => {
 
       if (data.authenticated) {
         setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        sessionStorage.setItem('user', JSON.stringify(data.user));
         navigate(data.user.role === 'Warehouse' ? '/warehouse' : '/clinic');
       } else {
         alert("Login failed: " + (data.message || "Invalid username or password"));
@@ -183,10 +183,12 @@ const ClinicDashboard = ({ user, logout }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false); // Data fetching state
   const [actionLoading, setActionLoading] = useState(false); // Button submission state
-
+  const [selectedTxn, setSelectedTxn] = useState(null); // To track clicked history item
   const locKey = user.location;
 
   useEffect(() => {
+    setSearchTerm(""); // Clears search when changing views
+    setSelectedTxn(null); // Closes any open modals when changing views
     if (['stock', 'restock', 'usage', 'history'].includes(view)) {
       setLoading(true);
       const fetchPath = view === 'history' 
@@ -355,19 +357,97 @@ const ClinicDashboard = ({ user, logout }) => {
 
             {view === 'history' && (
               <div className="space-y-4">
-                <div className="flex bg-slate-200 p-1 rounded-xl">
-                  <button onClick={()=>setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='in'?'bg-white shadow':'text-slate-500'}`}>Incoming</button>
-                  <button onClick={()=>setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='out'?'bg-white shadow':'text-slate-500'}`}>Usage</button>
-                </div>
-                <div className="space-y-2">
-                  {histTab === 'in' ? history.transfers?.map((t, idx) => (
-                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowDownToLine className="text-green-500"/><div className="text-xs"><b>{t.TransferID}</b><p className="text-[10px] text-slate-400">From {t.From.replace(/_/g,' ')} • {t.Status}</p></div></div>
-                  )) : history.usage?.map((u, idx) => (
-                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowUpFromLine className="text-red-500"/><div className="text-xs"><b>{u.Item_Name}</b><p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleDateString()} • Qty {u.Qty}</p></div></div>
-                  ))}
-                </div>
+    {/* Tab Switcher */}
+    <div className="flex bg-slate-200 p-1 rounded-xl">
+      <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
+      <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
+    </div>
+
+    <div className="space-y-2">
+      {histTab === 'in' ? (
+        history.transfers?.map((t, idx) => (
+          <div 
+            key={idx} 
+            onClick={() => setSelectedTxn(t)} // Click to open details
+            className="p-4 bg-white border rounded-xl flex items-center justify-between hover:border-blue-300 cursor-pointer transition shadow-sm active:scale-95"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${t.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                <ArrowDownToLine size={18} />
               </div>
-            )}
+              <div className="text-xs">
+                <b className="text-slate-700">{t.TransactionID}</b>
+                <p className="text-[10px] text-slate-400">From: {t.From.replace(/_/g, ' ')}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${t.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {t.Status}
+              </span>
+              <p className="text-[9px] text-slate-400 mt-1">{t.CreatedAt ? new Date(t.CreatedAt).toLocaleDateString() : ''}</p>
+            </div>
+          </div>
+        ))
+      ) : (
+        history.usage?.map((u, idx) => (
+          <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3 shadow-sm">
+            <div className="p-2 bg-red-50 text-red-600 rounded-full"><ArrowUpFromLine size={18} /></div>
+            <div className="text-xs">
+              <b className="text-slate-700">{u.Item_Name}</b>
+              <p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleString()} • Qty: {u.Qty}</p>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+
+    {/* --- TRANSACTION DETAILS MODAL --- */}
+    {selectedTxn && (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="font-bold text-lg text-slate-800">{selectedTxn.TransactionID}</h3>
+              <p className="text-xs text-slate-400">Transaction Details</p>
+            </div>
+            <button onClick={() => setSelectedTxn(null)} className="p-2 bg-slate-100 rounded-full text-slate-400">✕</button>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl text-xs">
+              <div>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">Recipient</p>
+                <p className="text-slate-700">{selectedTxn.RecipientName || 'Pending'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">Received At</p>
+                <p className="text-slate-700">
+                  {selectedTxn.ReceivedAt ? new Date(selectedTxn.ReceivedAt).toLocaleString() : 'Not received'}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-slate-400 font-bold uppercase text-[9px] mb-2 px-1">Items Included</p>
+              <div className="max-h-40 overflow-y-auto border rounded-xl divide-y">
+                {JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
+                  <div key={i} className="p-3 flex justify-between items-center text-sm">
+                    <span className="text-slate-700 font-medium">{item.name}</span>
+                    <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold text-xs">x{item.qty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button onClick={() => setSelectedTxn(null)} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition">
+            Close Details
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
           </>
         )}
       </div>
@@ -376,8 +456,17 @@ const ClinicDashboard = ({ user, logout }) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
-  const logout = () => { setUser(null); localStorage.removeItem('user'); };
+ 
+  useEffect(() => {
+  const handleTabClose = () => {
+    sessionStorage.removeItem('user');
+    };
+    window.addEventListener('beforeunload', handleTabClose);
+    return () => window.removeEventListener('beforeunload', handleTabClose);
+      }, []);
+
+  const [user, setUser] = useState(() => JSON.parse(sessionStorage.getItem('user')));
+  const logout = () => { setUser(null); sessionStorage.removeItem('user'); };
   return (
     <Router>
       <Routes>
