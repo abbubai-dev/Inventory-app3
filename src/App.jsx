@@ -158,6 +158,20 @@ const WarehouseDashboard = ({ user, logout }) => {
   );
 };
 
+// --- HELPER COMPONENT ---
+const SkeletonItem = () => (
+  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm animate-pulse mb-3">
+    <div className="flex justify-between items-center">
+      <div className="space-y-2 w-2/3">
+        <div className="h-2 bg-slate-200 rounded w-1/4"></div>
+        <div className="h-4 bg-slate-200 rounded w-full"></div>
+        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+      </div>
+      <div className="h-8 w-8 bg-slate-100 rounded-lg"></div>
+    </div>
+  </div>
+);
+
 // --- CLINIC DASHBOARD ---
 const ClinicDashboard = ({ user, logout }) => {
   const [view, setView] = useState('menu');
@@ -167,13 +181,27 @@ const ClinicDashboard = ({ user, logout }) => {
   const [history, setHistory] = useState({ transfers: [], usage: [] });
   const [histTab, setHistTab] = useState('in');
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Data fetching state
+  const [actionLoading, setActionLoading] = useState(false); // Button submission state
 
   const locKey = user.location;
 
   useEffect(() => {
-    if (['stock', 'restock', 'usage'].includes(view)) fetch(`${API_URL}?action=getInventory`).then(r => r.json()).then(setInventory);
-    if (view === 'history') fetch(`${API_URL}?action=getHistory&location=${locKey}`).then(r => r.json()).then(setHistory);
+    if (['stock', 'restock', 'usage', 'history'].includes(view)) {
+      setLoading(true);
+      const fetchPath = view === 'history' 
+        ? `${API_URL}?action=getHistory&location=${locKey}`
+        : `${API_URL}?action=getInventory`;
+
+      fetch(fetchPath)
+        .then(r => r.json())
+        .then(data => {
+          if (view === 'history') setHistory(data);
+          else setInventory(data);
+        })
+        .catch(err => console.error("Error:", err))
+        .finally(() => setLoading(false));
+    }
   }, [view]);
 
   useEffect(() => {
@@ -185,7 +213,7 @@ const ClinicDashboard = ({ user, logout }) => {
   }, [view]);
 
   const handleReceive = (id) => {
-    setLoading(true);
+    setActionLoading(true);
     setStatus({msg: 'Verifying Transaction...'});
     fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmReceipt', txnId: id, to: locKey }) })
       .then(res => res.json()).then((data) => {
@@ -196,17 +224,18 @@ const ClinicDashboard = ({ user, logout }) => {
           alert(data.message || "Invalid Transaction ID");
           setStatus(null);
         }
-        setLoading(false);
+        setActionLoading(false);
       });
   };
 
   const handleUsageSubmit = async () => {
     if (!confirm("Deduct usage from your shelf?")) return;
-    setLoading(true);
+    setActionLoading(true);
     await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'recordUsage', location: locKey, cart }) });
-    setCart([]); setStatus({msg: 'Stock Deducted'});
+    setCart([]); 
+    setStatus({msg: 'Stock Deducted'});
     setTimeout(() => { setView('menu'); setStatus(null); }, 2000);
-    setLoading(false);
+    setActionLoading(false);
   };
 
   return (
@@ -221,9 +250,11 @@ const ClinicDashboard = ({ user, logout }) => {
       </header>
 
       <div className="p-4 flex-1 max-w-md mx-auto w-full">
-        {status && <div className="p-4 mb-4 bg-green-600 text-white rounded-xl text-center font-bold flex items-center justify-center gap-2 shadow-lg animate-bounce">
-          <CheckCircle2 size={20} /> {status.msg}
-        </div>}
+        {status && (
+          <div className="p-4 mb-4 bg-green-600 text-white rounded-xl text-center font-bold flex items-center justify-center gap-2 shadow-lg animate-bounce">
+            <CheckCircle2 size={20} /> {status.msg}
+          </div>
+        )}
 
         {view === 'menu' && (
           <div className="grid gap-3">
@@ -245,83 +276,99 @@ const ClinicDashboard = ({ user, logout }) => {
           </div>
         )}
 
-        {view === 'scanner' && (
-          <div className="space-y-4">
-             <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
-                <div id="reader"></div>
-                <div className="mt-4 pt-4 border-t border-dashed">
-                   <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Or Manual Transaction Entry</p>
-                   <form onSubmit={(e) => {
-                      e.preventDefault();
-                      const val = e.target.txn.value.toUpperCase().trim();
-                      if(val) handleReceive(val);
-                   }} className="flex gap-2">
-                      <input name="txn" placeholder="TXN-XXXXXX" className="flex-1 p-3 border rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 uppercase" required />
-                      <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 rounded-xl font-bold">Confirm</button>
-                   </form>
-                </div>
-             </div>
-          </div>
-        )}
-
-        {view === 'usage' && (
+        {/* --- LIST VIEWS WITH SKELETONS --- */}
+        {view !== 'menu' && view !== 'scanner' && view !== 'usage_cart' && loading ? (
           <div className="space-y-3">
-            <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name or SKU..." className="w-full pl-10 pr-4 py-3 border rounded-xl" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
-            <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold">Review Usage</button></div>
-            {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
-              <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
-                <div><p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p><h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3><p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p></div>
-                <button onClick={() => { const q = prompt("Qty used?"); if(q) setCart([...cart, {name:i.Item_Name, code:i.Code, qty:q}]) }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Plus size={20}/></button>
+            <div className="h-12 bg-slate-200 rounded-xl mb-6 animate-pulse"></div>
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+          </div>
+        ) : (
+          <>
+            {view === 'scanner' && (
+              <div className="space-y-4">
+                 <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
+                    <div id="reader"></div>
+                    <div className="mt-4 pt-4 border-t border-dashed">
+                       <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Or Manual Transaction Entry</p>
+                       <form onSubmit={(e) => {
+                          e.preventDefault();
+                          const val = e.target.txn.value.toUpperCase().trim();
+                          if(val) handleReceive(val);
+                       }} className="flex gap-2">
+                          <input name="txn" placeholder="TXN-XXXXXX" className="flex-1 p-3 border rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 uppercase" required />
+                          <button type="submit" disabled={actionLoading} className="bg-blue-600 text-white px-4 rounded-xl font-bold min-w-25 flex items-center justify-center">
+                            {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Confirm"}
+                          </button>
+                       </form>
+                    </div>
+                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {view === 'usage_cart' && (
-          <div className="space-y-4">
-            <h2 className="font-bold text-lg">Confirm Usage</h2>
-            <div className="space-y-2">
-              {cart.map((c, idx) => <div key={idx} className="p-3 bg-white border rounded-xl flex justify-between text-sm"><span>{c.name}</span><div className="flex items-center gap-3"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500 text-xl">×</button></div></div>)}
-            </div>
-            <button onClick={handleUsageSubmit} disabled={loading || cart.length === 0} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg">
-              {loading ? "Updating..." : "Record Usage Now"}
-            </button>
-          </div>
-        )}
-
-        {view === 'stock' && (
-          <div className="space-y-2">
-            <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
-            {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
-              <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center">
-                <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><span className="text-sm font-bold text-slate-700">{i.Item_Name}</span></div>
-                <span className={`font-bold px-3 py-1 rounded-lg ${Number(i[locKey]) <= i.MinStock ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{i[locKey] || 0}</span>
+            {view === 'usage' && (
+              <div className="space-y-3">
+                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name or SKU..." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
+                <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
+                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
+                  <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
+                    <div><p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p><h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3><p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p></div>
+                    <button onClick={() => { const q = prompt("Qty used?"); if(q) setCart([...cart, {name:i.Item_Name, code:i.Code, qty:q}]) }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Plus size={20}/></button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).map(i => (
-          <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
-            <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
-            <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
-          </div>
-        ))}
-
-        {view === 'history' && (
-           <div className="space-y-4">
-              <div className="flex bg-slate-200 p-1 rounded-xl">
-                 <button onClick={()=>setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='in'?'bg-white shadow':'text-slate-500'}`}>Incoming</button>
-                 <button onClick={()=>setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='out'?'bg-white shadow':'text-slate-500'}`}>Usage</button>
+            {view === 'usage_cart' && (
+              <div className="space-y-4">
+                <h2 className="font-bold text-lg">Confirm Usage</h2>
+                <div className="space-y-2">
+                  {cart.map((c, idx) => <div key={idx} className="p-3 bg-white border rounded-xl flex justify-between text-sm"><span>{c.name}</span><div className="flex items-center gap-3"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500 text-xl">×</button></div></div>)}
+                </div>
+                <button onClick={handleUsageSubmit} disabled={actionLoading || cart.length === 0} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                  {actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Record Usage Now"}
+                </button>
               </div>
+            )}
+
+            {view === 'stock' && (
               <div className="space-y-2">
-                 {histTab === 'in' ? history.transfers?.map((t, idx) => (
-                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowDownToLine className="text-green-500"/><div className="text-xs"><b>{t.TransferID}</b><p className="text-[10px] text-slate-400">From {t.From.replace(/_/g,' ')} • {t.Status}</p></div></div>
-                 )) : history.usage?.map((u, idx) => (
-                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowUpFromLine className="text-red-500"/><div className="text-xs"><b>{u.Item_Name}</b><p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleDateString()} • Qty {u.Qty}</p></div></div>
-                 ))}
+                <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
+                  <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
+                    <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><span className="text-sm font-bold text-slate-700">{i.Item_Name}</span></div>
+                    <span className={`font-bold px-3 py-1 rounded-lg ${Number(i[locKey]) <= i.MinStock ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{i[locKey] || 0}</span>
+                  </div>
+                ))}
               </div>
-           </div>
+            )}
+
+            {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).map(i => (
+              <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
+                <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
+                <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
+              </div>
+            ))}
+
+            {view === 'history' && (
+              <div className="space-y-4">
+                <div className="flex bg-slate-200 p-1 rounded-xl">
+                  <button onClick={()=>setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='in'?'bg-white shadow':'text-slate-500'}`}>Incoming</button>
+                  <button onClick={()=>setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${histTab==='out'?'bg-white shadow':'text-slate-500'}`}>Usage</button>
+                </div>
+                <div className="space-y-2">
+                  {histTab === 'in' ? history.transfers?.map((t, idx) => (
+                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowDownToLine className="text-green-500"/><div className="text-xs"><b>{t.TransferID}</b><p className="text-[10px] text-slate-400">From {t.From.replace(/_/g,' ')} • {t.Status}</p></div></div>
+                  )) : history.usage?.map((u, idx) => (
+                    <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3"><ArrowUpFromLine className="text-red-500"/><div className="text-xs"><b>{u.Item_Name}</b><p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleDateString()} • Qty {u.Qty}</p></div></div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
