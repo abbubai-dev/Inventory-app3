@@ -46,7 +46,7 @@ const Login = ({ setUser }) => {
         <div className="flex justify-center mb-6">
           <img src="/logo_PKPDKK.png" alt="PKPDKK Logo" className="h-20 w-auto object-contain" />
         </div>
-        <h1 className="text-2xl font-bold mb-2 text-center text-slate-800">Inventory System</h1>
+        <h1 className="text-2xl font-bold mb-2 text-center text-slate-800">Sistem Inventori PKPDKK</h1>
         <p className="text-center text-slate-500 mb-6 text-sm">Sign in to continue</p>
         
         <div className="space-y-4">
