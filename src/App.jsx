@@ -214,21 +214,30 @@ const ClinicDashboard = ({ user, logout }) => {
     }
   }, [view]);
 
-  const handleReceive = (id) => {
-    setActionLoading(true);
-    setStatus({msg: 'Verifying Transaction...'});
-    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmReceipt', txnId: id, to: locKey }) })
-      .then(res => res.json()).then((data) => {
-        if(data.status === 'success') {
-          setStatus({msg: 'Success: Stock Added!'});
-          setTimeout(() => { setView('menu'); setStatus(null); }, 2000);
-        } else {
-          alert(data.message || "Invalid Transaction ID");
-          setStatus(null);
-        }
-        setActionLoading(false);
-      });
-  };
+  const handleReceive = async (txnId) => {
+  // We take the name from the currently logged-in user state
+  const recipientName = user.name; 
+
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'confirmReceipt',
+        txnId: txnId,
+        to: user.location, // The clinic location
+        recipient: recipientName // Captured here!
+      })
+    });
+    
+    const result = await resp.json();
+    if (result.status === 'success') {
+      alert(`Success! Confirmed by ${recipientName}`);
+      refreshData(); // Refresh to show "Completed" status
+    }
+  } catch (e) {
+    console.error("Confirmation failed", e);
+  }
+};
 
   const handleUsageSubmit = async () => {
     if (!confirm("Deduct usage from your shelf?")) return;
