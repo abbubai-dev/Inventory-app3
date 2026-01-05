@@ -8,7 +8,7 @@ import {
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
-const API_URL = "https://script.google.com/macros/s/AKfycbz-4CQeSwi6OTD2tKN7--Drr6layauYyBjjEWtS3Fnn5WOoB-nfIQez1X6X9z_bNhb1/exec";
+const API_URL = import.meta.env.VITE_APP_API_URL;
 
 // --- NEW: LOGIN COMPONENT WITH DROPDOWNS ---
 const Login = ({ setUser }) => {
@@ -318,7 +318,6 @@ const SkeletonItem = () => (
     <div className="h-3 bg-slate-200 rounded w-1/2"></div>
   </div>
 );
-
 
 // --- CLINIC DASHBOARD ---
 const ClinicDashboard = ({ user, logout }) => {
