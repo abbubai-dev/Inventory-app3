@@ -312,7 +312,15 @@ const AdminDashboard = ({ user, logout }) => {
   );
 };
 
-// --- UPDATED CLINIC DASHBOARD ---
+const SkeletonItem = () => (
+  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm animate-pulse mb-3">
+    <div className="h-4 bg-slate-200 rounded w-full mb-2"></div>
+    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+  </div>
+);
+
+
+// --- CLINIC DASHBOARD ---
 const ClinicDashboard = ({ user, logout }) => {
   const [view, setView] = useState('menu');
   const [inventory, setInventory] = useState([]);
@@ -324,12 +332,17 @@ const ClinicDashboard = ({ user, logout }) => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedTxn, setSelectedTxn] = useState(null);
-  const [txnId, setTxnId] = useState(null); // For QR display after Transfer Out
+  
+  // ✅ FIX 1: Added missing states for Transfer Out
+  const [txnId, setTxnId] = useState(null); 
   const [targetLoc, setTargetLoc] = useState("");
   
   const locKey = user.location;
-  const allLocations = ["MAIN_WH", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
 
+  // ✅ FIX 2: Added missing Location List (Matches your Google Sheet Headers)
+  const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
+
+  // ✅ FIX 3: Added refreshData function to update inventory/history
   const refreshData = () => {
     setLoading(true);
     const fetchPath = view === 'history' 
@@ -342,13 +355,14 @@ const ClinicDashboard = ({ user, logout }) => {
         if (view === 'history') setHistory(data);
         else setInventory(data);
       })
+      .catch(err => console.error("Error:", err))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     setSearchTerm("");
     setSelectedTxn(null);
-    setTxnId(null);
+    setTxnId(null); // Reset QR code when changing views
     if (['stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
       refreshData();
     }
@@ -362,54 +376,62 @@ const ClinicDashboard = ({ user, logout }) => {
     }
   }, [view]);
 
-  const handleReceive = async (scannedId) => {
+  const handleReceive = async (txnId) => {
+    const recipientName = user.name; 
     setActionLoading(true);
     try {
       const resp = await fetch(API_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'confirmReceipt',
-          txnId: scannedId,
+          txnId: txnId,
           to: user.location,
-          recipient: user.name 
+          recipient: recipientName 
         })
       });
       const result = await resp.json();
       if (result.status === 'success') {
-        setStatus({msg: "Stock Received Successfully!"});
-        setTimeout(() => { setView('menu'); setStatus(null); }, 2000);
-      } else {
-        alert(result.message || "Failed to confirm receipt.");
+        alert(`Success! Confirmed by ${recipientName}`);
+        refreshData(); // Now this function exists!
+        setView('menu');
       }
     } catch (e) {
-      alert("System Error during receiving.");
+      console.error("Confirmation failed", e);
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUsageSubmit = async () => {
+    if (cart.length === 0) return;
     if (!confirm("Deduct usage from your shelf?")) return;
     setActionLoading(true);
-    await fetch(API_URL, { 
-      method: 'POST', 
-      body: JSON.stringify({ 
-        action: 'recordUsage', 
-        location: locKey, 
-        cart, 
-        user: user.name // Passed to the new "User" column in UsageLog
-      }) 
-    });
-    setCart([]); 
-    setStatus({msg: 'Stock Deducted'});
-    setTimeout(() => { setView('menu'); setStatus(null); }, 2000);
-    setActionLoading(false);
+    try {
+      const response = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+          action: 'recordUsage', 
+          location: locKey, 
+          cart: cart,
+          user: user.name 
+        }) 
+      });
+      const result = await response.json();
+      if (result.status === 'success') {
+        setCart([]); 
+        setStatus({msg: 'Stock Deducted'});
+        setTimeout(() => { setView('menu'); setStatus(null); refreshData(); }, 2000);
+      }
+    } catch (error) {
+      alert("Error recording usage.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleClinicTransfer = async () => {
-    if (!targetLoc) return alert("Please select a destination clinic.");
-    if (!confirm(`Transfer these items to ${targetLoc}?`)) return;
-    
+    if (!targetLoc) return alert("Select destination clinic");
+    if (cart.length === 0) return;
     setActionLoading(true);
     try {
       const res = await fetch(API_URL, { 
@@ -422,11 +444,11 @@ const ClinicDashboard = ({ user, logout }) => {
         }) 
       });
       const data = await res.json();
-      setTxnId(data.txnId); // Shows the QR code for the driver/receiver
+      setTxnId(data.txnId); // Display QR code
       setCart([]);
-      setStatus({msg: 'Transfer Initiated'});
+      refreshData();
     } catch (err) {
-      alert("Transfer failed.");
+      alert("Transfer failed");
     } finally {
       setActionLoading(false);
     }
@@ -438,12 +460,9 @@ const ClinicDashboard = ({ user, logout }) => {
         <div className="flex items-center gap-2">
           {view !== 'menu' && <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-full"><ChevronLeft size={18}/></button>}
           <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
-          <h1 className="font-bold text-sm truncate">{user.location}</h1>
+          <h1 className="font-bold text-sm truncate">{user.location.replace(/_/g, ' ')}</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold uppercase">{user.name}</span>
-          <button onClick={logout} className="text-slate-400"><LogOut size={20}/></button>
-        </div>
+        <button onClick={logout} className="text-slate-400"><LogOut size={20}/></button>
       </header>
 
       <div className="p-4 flex-1 max-w-md mx-auto w-full">
@@ -458,22 +477,87 @@ const ClinicDashboard = ({ user, logout }) => {
             <button onClick={() => setView('usage')} className="bg-blue-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
               <Minus size={28}/> <div className="text-left"><h2 className="font-bold">Record Usage</h2><p className="text-[10px] opacity-70 italic tracking-wider">Deduct items from inventory</p></div>
             </button>
-            <button onClick={() => setView('transfer_out')} className="bg-orange-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
-              <ArrowUpFromLine size={28}/> <div className="text-left"><h2 className="font-bold">Transfer Out</h2><p className="text-[10px] opacity-70 italic tracking-wider">Send stock to another clinic</p></div>
-            </button>
             <button onClick={() => setView('scanner')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm active:scale-95 transition">
               <QrCode size={28} className="text-green-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Receive Stock</h2><p className="text-[10px] text-slate-400">Scan QR or enter TXN ID</p></div>
             </button>
+            <button onClick={() => setView('transfer_out')} className="bg-orange-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
+      <ArrowUpFromLine size={28}/> 
+      <div className="text-left">
+        <h2 className="font-bold">Transfer Out</h2>
+        <p className="text-[10px] opacity-70 italic tracking-wider">Send stock to another clinic</p>
+      </div>
+    </button>
             <button onClick={() => setView('restock')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
               <AlertTriangle size={28} className="text-orange-500"/> <div className="text-left"><h2 className="font-bold text-slate-700">Restock List</h2><p className="text-[10px] text-slate-400">Items below minimum stock</p></div>
             </button>
             <button onClick={() => setView('history')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
               <History size={28} className="text-purple-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Activity History</h2><p className="text-[10px] text-slate-400">View logs</p></div>
             </button>
+            <button onClick={() => setView('stock')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
+              <Package size={28} className="text-slate-500"/> <div className="text-left"><h2 className="font-bold text-slate-700">Full Inventory</h2><p className="text-[10px] text-slate-400">Check all item levels</p></div>
+            </button>
           </div>
         )}
 
-        {/* --- TRANSFER OUT VIEW --- */}
+        {/* --- LIST VIEWS WITH SKELETONS --- */}
+        {view !== 'menu' && view !== 'scanner' && view !== 'usage_cart' && loading ? (
+          <div className="space-y-3">
+            <div className="h-12 bg-slate-200 rounded-xl mb-6 animate-pulse"></div>
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+            <SkeletonItem />
+          </div>
+        ) : (
+          <>
+            {view === 'scanner' && (
+              <div className="space-y-4">
+                 <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
+                    <div id="reader"></div>
+                    <div className="mt-4 pt-4 border-t border-dashed">
+                       <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Or Manual Transaction Entry</p>
+                       <form onSubmit={(e) => {
+                          e.preventDefault();
+                          const val = e.target.txn.value.toUpperCase().trim();
+                          if(val) handleReceive(val);
+                       }} className="flex gap-2">
+                          <input name="txn" placeholder="TXN-XXXXXX" className="flex-1 p-3 border rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 uppercase" required />
+                          <button type="submit" disabled={actionLoading} className="bg-blue-600 text-white px-4 rounded-xl font-bold min-w-25 flex items-center justify-center">
+                            {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Confirm"}
+                          </button>
+                       </form>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {view === 'usage' && (
+              <div className="space-y-3">
+                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name or SKU..." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
+                <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
+                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
+                  <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
+                    <div><p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p><h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3><p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p></div>
+                    <button onClick={() => { const q = prompt("Qty used?"); if(q) setCart([...cart, {name:i.Item_Name, code:i.Code, qty:q}]) }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Plus size={20}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {view === 'usage_cart' && (
+              <div className="space-y-4">
+                <h2 className="font-bold text-lg">Confirm Usage</h2>
+                <div className="space-y-2">
+                  {cart.map((c, idx) => <div key={idx} className="p-3 bg-white border rounded-xl flex justify-between text-sm"><span>{c.name}</span><div className="flex items-center gap-3"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500 text-xl">×</button></div></div>)}
+                </div>
+                <button onClick={handleUsageSubmit} disabled={actionLoading || cart.length === 0} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                  {actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Record Usage Now"}
+                </button>
+              </div>
+            )}
+
+            {/* --- TRANSFER OUT VIEW --- */}
         {view === 'transfer_out' && (
           <div className="space-y-4">
             {!txnId ? (
@@ -526,8 +610,120 @@ const ClinicDashboard = ({ user, logout }) => {
           </div>
         )}
 
-        {/* ... Include Usage, Stock, History, and Restock views from original code ... */}
-        {/* Note: Ensure the Usage Cart Submit uses the updated handleUsageSubmit */}
+            {view === 'stock' && (
+              <div className="space-y-2">
+                <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
+                  <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
+                    <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><span className="text-sm font-bold text-slate-700">{i.Item_Name}</span></div>
+                    <span className={`font-bold px-3 py-1 rounded-lg ${Number(i[locKey]) <= i.MinStock ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{i[locKey] || 0}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).map(i => (
+              <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
+                <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
+                <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
+              </div>
+            ))}
+
+            {view === 'history' && (
+              <div className="space-y-4">
+    {/* Tab Switcher */}
+    <div className="flex bg-slate-200 p-1 rounded-xl">
+      <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
+      <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
+    </div>
+
+    <div className="space-y-2">
+      {histTab === 'in' ? (
+        history.transfers?.map((t, idx) => (
+          <div 
+            key={idx} 
+            onClick={() => setSelectedTxn(t)} // Click to open details
+            className="p-4 bg-white border rounded-xl flex items-center justify-between hover:border-blue-300 cursor-pointer transition shadow-sm active:scale-95"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${t.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                <ArrowDownToLine size={18} />
+              </div>
+              <div className="text-xs">
+                <b className="text-slate-700">{t.TransactionID}</b>
+                <p className="text-[10px] text-slate-400">From: {t.From.replace(/_/g, ' ')}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${t.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {t.Status}
+              </span>
+              <p className="text-[9px] text-slate-400 mt-1">{t.CreatedAt ? new Date(t.CreatedAt).toLocaleDateString() : ''}</p>
+            </div>
+          </div>
+        ))
+      ) : (
+        history.usage?.map((u, idx) => (
+          <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3 shadow-sm">
+            <div className="p-2 bg-red-50 text-red-600 rounded-full"><ArrowUpFromLine size={18} /></div>
+            <div className="text-xs">
+              <b className="text-slate-700">{u.Item_Name}</b>
+              <p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleString()} • Qty: {u.Qty}</p>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+
+    {/* --- TRANSACTION DETAILS MODAL --- */}
+    {selectedTxn && (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="font-bold text-lg text-slate-800">{selectedTxn.TransactionID}</h3>
+              <p className="text-xs text-slate-400">Transaction Details</p>
+            </div>
+            <button onClick={() => setSelectedTxn(null)} className="p-2 bg-slate-100 rounded-full text-slate-400">✕</button>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl text-xs">
+              <div>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">Recipient</p>
+                <p className="text-slate-700">{selectedTxn.RecipientName || 'Pending'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">Received At</p>
+                <p className="text-slate-700">
+                  {selectedTxn.ReceivedAt ? new Date(selectedTxn.ReceivedAt).toLocaleString() : 'Not received'}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-slate-400 font-bold uppercase text-[9px] mb-2 px-1">Items Included</p>
+              <div className="max-h-40 overflow-y-auto border rounded-xl divide-y">
+                {JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
+                  <div key={i} className="p-3 flex justify-between items-center text-sm">
+                    <span className="text-slate-700 font-medium">{item.name}</span>
+                    <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold text-xs">x{item.qty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button onClick={() => setSelectedTxn(null)} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition">
+            Close Details
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+          </>
+        )}
       </div>
     </div>
   );
