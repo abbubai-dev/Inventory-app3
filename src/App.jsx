@@ -10,7 +10,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const API_URL = import.meta.env.VITE_APP_API_URL;
 
-// --- NEW: LOGIN COMPONENT WITH DROPDOWNS ---
+// --- LOGIN COMPONENT WITH DROPDOWNS ---
 const Login = ({ setUser }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -100,7 +100,7 @@ const Login = ({ setUser }) => {
   );
 };
 
-// --- UPDATED WAREHOUSE DASHBOARD WITH CLINIC ALERTS ---
+// ---WAREHOUSE DASHBOARD WITH CLINIC ALERTS ---
 const WarehouseDashboard = ({ user, logout }) => {
   const [inventory, setInventory] = useState([]);
   const [cart, setCart] = useState([]);
@@ -117,7 +117,7 @@ const WarehouseDashboard = ({ user, logout }) => {
   // Filter items that are low in ANY clinic
   const clinicAlerts = inventory.filter(item => {
     const clinics = ["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
-    return clinics.some(c => (Number(item[c]) || 0) <= (item.MinStock || 0));
+    return clinics.some(c => (Number(item[c]) || 0) < (item.MinStock || 0));
   });
 
   const addToCart = (item) => {
@@ -141,7 +141,7 @@ const WarehouseDashboard = ({ user, logout }) => {
         <header className="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
           <div className="flex items-center gap-3">
             <img src="/logo_PKPDKK.png" alt="Logo" className="h-8 w-auto" />
-            <h1 className="text-xl font-bold">Warehouse</h1>
+            <h1 className="text-xl font-bold">STOR PKPDKK</h1>
           </div>
           <div className="flex gap-4">
             <button 
@@ -164,7 +164,7 @@ const WarehouseDashboard = ({ user, logout }) => {
                    <div key={item.Code} className="bg-white p-3 rounded-xl border border-red-100 shadow-sm flex justify-between items-center">
                       <div>
                         <p className="font-bold text-xs">{item.Item_Name}</p>
-                        <p className="text-[10px] text-slate-400">Critical at: {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].filter(c => (Number(item[c])||0) <= item.MinStock).join(", ")}</p>
+                        <p className="text-[10px] text-slate-400">Critical at: {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].filter(c => (Number(item[c])||0) < item.MinStock).join(", ")}</p>
                       </div>
                       <button onClick={() => { setTargetLoc("KPH"); addToCart(item); }} className="p-1 px-3 bg-red-600 text-white text-[10px] font-bold rounded-lg">Fulfill</button>
                    </div>
@@ -175,18 +175,26 @@ const WarehouseDashboard = ({ user, logout }) => {
 
           <div className="relative mb-6">
             <Search className="absolute left-3 top-3 text-slate-400" size={20} />
-            <input placeholder="Search Warehouse Inventory..." className="w-full pl-10 pr-4 py-3 rounded-xl border outline-none shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+            <input placeholder="Search Category, Items, ID..." className="w-full pl-10 pr-4 py-3 rounded-xl border outline-none shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm)).map(item => {
+            {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Category?.toLowerCase().includes(searchTerm) || i.Code?.toString().toLowerCase().includes(searchTerm)).map(item => {
               const stock = Number(item[user.location]) || 0;
+              const low = stock < item.MinStock && stock > 0;
               return (
-                <div key={item.Code} className="p-4 rounded-xl border bg-white border-slate-100 shadow-sm">
+                <div key={item.Code} className={`p-4 rounded-xl border bg-white ${stock <= 0 ? 'opacity-60' : low ? 'border-orange-300 bg-orange-50' : 'border-slate-100'}`}>
                   <div className="flex justify-between mb-2">
-                    <h3 className="font-bold text-sm truncate">{item.Item_Name}</h3>
-                    <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold">{stock}</span>
+                    <div className="truncate pr-2">
+                      <div className="flex gap-2 items-center mb-1">
+                        <span className="text-[9px] text-blue-500 font-bold uppercase bg-blue-50 px-1 rounded">{item.Category}</span>
+                        <span className="text-[9px] text-slate-400 font-mono font-bold">#{item.Code}</span>
+                      </div>
+                      <h3 className="font-bold text-sm truncate">{item.Item_Name}</h3>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded font-bold h-fit ${stock <= 0 ? 'bg-red-500 text-white' : 'bg-green-100 text-green-700'}`}>{stock}</span>
                   </div>
+
                   <button onClick={() => addToCart(item)} className="w-full mt-2 bg-blue-50 text-blue-600 py-2 rounded-lg text-xs font-bold hover:bg-blue-600 hover:text-white transition">Add to Transfer</button>
                 </div>
               );
@@ -195,7 +203,7 @@ const WarehouseDashboard = ({ user, logout }) => {
         </div>
       </div>
 
-      {/* Cart Sidebar remains same as your original code */}
+      {/* Cart Sidebar remains same */}
       <div className="w-80 bg-white border-l shadow-xl flex flex-col">
           <div className="p-4 border-b bg-slate-50 font-bold">Transfer Cart</div>
           <div className="p-4 bg-white border-b">
@@ -227,7 +235,7 @@ const WarehouseDashboard = ({ user, logout }) => {
   );
 };
 
-// --- NEW: ADMIN DASHBOARD COMPONENT ---
+// ---  ADMIN DASHBOARD ---
 const AdminDashboard = ({ user, logout }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -282,7 +290,7 @@ const AdminDashboard = ({ user, logout }) => {
                   <option>Clinic</option>
                 </select>
                 <select name="location" className="p-3 border rounded-xl">
-                  {["Stor", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l}>{l}</option>)}
+                  {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l}>{l}</option>)}
                 </select>
               </div>
               <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">
@@ -332,16 +340,12 @@ const ClinicDashboard = ({ user, logout }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedTxn, setSelectedTxn] = useState(null);
   
-  // ✅ FIX 1: Added missing states for Transfer Out
   const [txnId, setTxnId] = useState(null); 
   const [targetLoc, setTargetLoc] = useState("");
   
   const locKey = user.location;
-
-  // ✅ FIX 2: Added missing Location List (Matches your Google Sheet Headers)
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
 
-  // ✅ FIX 3: Added refreshData function to update inventory/history
   const refreshData = () => {
     setLoading(true);
     const fetchPath = view === 'history' 
@@ -391,7 +395,7 @@ const ClinicDashboard = ({ user, logout }) => {
       const result = await resp.json();
       if (result.status === 'success') {
         alert(`Success! Confirmed by ${recipientName}`);
-        refreshData(); // Now this function exists!
+        refreshData();
         setView('menu');
       }
     } catch (e) {
@@ -456,13 +460,29 @@ const ClinicDashboard = ({ user, logout }) => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-2">
-          {view !== 'menu' && <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-full"><ChevronLeft size={18}/></button>}
-          <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
-          <h1 className="font-bold text-sm truncate">{user.location.replace(/_/g, ' ')}</h1>
-        </div>
-        <button onClick={logout} className="text-slate-400"><LogOut size={20}/></button>
-      </header>
+  <div className="flex items-center gap-2">
+    {view !== 'menu' && (
+      <button 
+        onClick={() => setView('menu')} 
+        className="p-2 bg-slate-100 rounded-full"
+      >
+        <ChevronLeft size={18}/>
+      </button>
+    )}
+    <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
+    <div className="flex flex-col">
+      <span className="font-bold text-sm truncate">
+        {user?.name?.replace(/_/g, ' ')}
+      </span>
+      <span className="text-xs text-slate-500 truncate">
+        {user?.location?.replace(/_/g, ' ')}
+      </span>
+    </div>
+  </div>
+  <button onClick={logout} className="text-slate-400">
+    <LogOut size={20}/>
+  </button>
+</header>
 
       <div className="p-4 flex-1 max-w-md mx-auto w-full">
         {status && (
@@ -533,14 +553,38 @@ const ClinicDashboard = ({ user, logout }) => {
 
             {view === 'usage' && (
               <div className="space-y-3">
-                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name or SKU..." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
+                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name, Category, ID.." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
                 <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
-                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
-                  <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
-                    <div><p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p><h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3><p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p></div>
-                    <button onClick={() => { const q = prompt("Qty used?"); if(q) setCart([...cart, {name:i.Item_Name, code:i.Code, qty:q}]) }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Plus size={20}/></button>
-                  </div>
-                ))}
+                {inventory
+  .filter(i => {
+    const term = searchTerm.toLowerCase();
+    return (
+      i.Item_Name?.toLowerCase().includes(term) ||
+      i.Category?.toLowerCase().includes(term) ||
+      i.Code?.toString().includes(term)
+    );
+  })
+  .map(i => (
+    <div
+      key={i.Code}
+      className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm"
+    >
+      <div>
+        <p className="text-[10px] text-slate-400 font-mono font-bold">#{i.Code} - {i.Category}</p>
+        <h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3>
+        <p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p>
+      </div>
+      <button
+        onClick={() => {
+          const q = prompt("Qty used?");
+          if (q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]);
+        }}
+        className="p-3 bg-blue-50 text-blue-600 rounded-xl"
+      >
+        <Plus size={20} />
+      </button>
+    </div>
+  ))}
               </div>
             )}
 
@@ -573,16 +617,58 @@ const ClinicDashboard = ({ user, logout }) => {
                   </select>
                 </div>
                 
-                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Find items to send..." className="w-full pl-10 pr-4 py-3 border rounded-xl" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
-                
-                <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in transfer</span><button onClick={()=>setView('transfer_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold">Review Transfer</button></div>
+                <div className="relative">
+  <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
+  <input 
+    placeholder="Find items to send..." 
+    className="w-full pl-10 pr-4 py-3 border rounded-xl" 
+    onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
+  />
+</div>
 
-                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm)).map(i => (
-                  <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
-                    <div><h3 className="text-sm font-bold">{i.Item_Name}</h3><p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p></div>
-                    <button onClick={() => { const q = prompt(`How many ${i.Item_Name} to send?`); if(q) setCart([...cart, {name:i.Item_Name, code:i.Code, qty:q}]) }} className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Plus size={20}/></button>
-                  </div>
-                ))}
+<div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center">
+  <span className="text-xs font-bold text-blue-600">
+    {cart.length} items in transfer
+  </span>
+  <button 
+    onClick={() => setView('transfer_cart')} 
+    className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold"
+  >
+    Review Transfer
+  </button>
+</div>
+
+{inventory
+  .filter(i => {
+    const term = searchTerm.toLowerCase();
+    return (
+      i.Item_Name?.toLowerCase().includes(term) ||
+      i.Category?.toLowerCase().includes(term) ||
+      i.Code?.toString().includes(term)
+    );
+  })
+  .map(i => (
+    <div 
+      key={i.Code} 
+      className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm"
+    >
+      <div>
+        <p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p>
+        <h3 className="text-sm font-bold">{i.Item_Name}</h3>
+        <p className="text-xs text-slate-500">Category: {i.Category}</p>
+        <p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p>
+      </div>
+      <button 
+        onClick={() => { 
+          const q = prompt(`How many ${i.Item_Name} to send?`); 
+          if(q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]); 
+        }} 
+        className="p-3 bg-blue-50 text-blue-600 rounded-xl"
+      >
+        <Plus size={20}/>
+      </button>
+    </div>
+  ))}
               </>
             ) : (
               <div className="bg-white p-8 rounded-3xl border shadow-xl text-center space-y-4">
@@ -610,18 +696,46 @@ const ClinicDashboard = ({ user, logout }) => {
         )}
 
             {view === 'stock' && (
-              <div className="space-y-2">
-                <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
-                {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Code?.toString().includes(searchTerm)).map(i => (
-                  <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
-                    <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><span className="text-sm font-bold text-slate-700">{i.Item_Name}</span></div>
-                    <span className={`font-bold px-3 py-1 rounded-lg ${Number(i[locKey]) <= i.MinStock ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{i[locKey] || 0}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+  <div className="space-y-2">
+    <input 
+      placeholder="Search all items..." 
+      className="w-full p-3 border rounded-xl mb-4 shadow-sm" 
+      onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
+    />
+    {inventory
+      .filter(i => {
+        const term = searchTerm.toLowerCase();
+        return (
+          i.Item_Name?.toLowerCase().includes(term) ||
+          i.Category?.toLowerCase().includes(term) ||
+          i.Code?.toString().includes(term)
+        );
+      })
+      .map(i => (
+        <div 
+          key={i.Code} 
+          className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm"
+        >
+          <div>
+            <p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p>
+            <span className="text-sm font-bold text-slate-700">{i.Item_Name}</span>
+            <p className="text-xs text-slate-500">Category: {i.Category}</p>
+          </div>
+          <span
+            className={`font-bold px-3 py-1 rounded-lg ${
+              Number(i[locKey]) < i.MinStock
+                ? 'bg-red-100 text-red-600'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {i[locKey] || 0}
+          </span>
+        </div>
+      ))}
+  </div>
+)}
 
-            {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).map(i => (
+            {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
               <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
                 <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
                 <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
