@@ -3,10 +3,12 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'r
 import { 
   Plus, Minus, QrCode, LogOut, Package, Search, 
   ChevronLeft, AlertTriangle, History, ArrowDownToLine, 
-  ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, MapPin
+  ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const API_URL = import.meta.env.VITE_APP_API_URL;
 
@@ -339,12 +341,91 @@ const ClinicDashboard = ({ user, logout }) => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedTxn, setSelectedTxn] = useState(null);
-  
   const [txnId, setTxnId] = useState(null); 
   const [targetLoc, setTargetLoc] = useState("");
-  
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const locKey = user.location;
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
+
+  // ✅ FIX 1: Move getFilteredData to the top level so PDF export can see it
+  const getFilteredData = () => {
+    let data = histTab === 'in' ? history.transfers : history.usage;
+    if (!data) return [];
+    return data.filter(item => {
+      const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+      if (startDate && itemDate < startDate) return false;
+      if (endDate && itemDate > endDate) return false;
+      return true;
+    });
+  };
+
+  // ✅ FIX 2: Fixed PDF Export to include Summary and proper data access
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const title = histTab === 'in' ? "Incoming Stock Report" : "Clinic Usage Report";
+    const dataToExport = getFilteredData();
+
+    if (dataToExport.length === 0) return alert("No data to export for selected range.");
+
+    // Page 1: Logs
+    doc.setFontSize(18);
+    doc.text(title, 14, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`, 14, 28);
+    
+    const tableHeaders = histTab === 'in' 
+      ? [["Date", "ID", "From", "Status"]] 
+      : [["Date", "Item Name", "Qty", "User"]];
+
+    const tableRows = dataToExport.map(item => histTab === 'in' 
+      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.Status]
+      : [new Date(item.Timestamp).toLocaleDateString(), item.Item_Name, item.Qty, item.User || 'Staff']
+    );
+
+    doc.autoTable({ 
+      head: tableHeaders, 
+      body: tableRows, 
+      startY: 40, 
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85] }
+    });
+
+    // Page 2: Summary
+    doc.addPage();
+    doc.setTextColor(0);
+    doc.setFontSize(16);
+    doc.text("Executive Summary", 14, 20);
+    
+    let summaryHeaders, summaryRows;
+    if (histTab === 'out') {
+      const totals = dataToExport.reduce((acc, curr) => {
+        acc[curr.Item_Name] = (acc[curr.Item_Name] || 0) + Number(curr.Qty);
+        return acc;
+      }, {});
+      summaryHeaders = [["Item Description", "Total Qty Used"]];
+      summaryRows = Object.entries(totals).sort((a,b) => b[1] - a[1]).map(([name, qty]) => [name, qty]);
+    } else {
+      const stats = dataToExport.reduce((acc, curr) => {
+        acc[curr.Status] = (acc[curr.Status] || 0) + 1;
+        return acc;
+      }, {});
+      summaryHeaders = [["Transaction Status", "Count"]];
+      summaryRows = Object.entries(stats).map(([status, count]) => [status, count]);
+    }
+
+    doc.autoTable({
+      head: summaryHeaders,
+      body: summaryRows,
+      startY: 30,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235] }
+    });
+
+    doc.save(`${histTab}_Report_${user.location}.pdf`);
+  };
 
   const refreshData = () => {
     setLoading(true);
@@ -365,7 +446,7 @@ const ClinicDashboard = ({ user, logout }) => {
   useEffect(() => {
     setSearchTerm("");
     setSelectedTxn(null);
-    setTxnId(null); // Reset QR code when changing views
+    setTxnId(null);
     if (['stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
       refreshData();
     }
@@ -447,7 +528,7 @@ const ClinicDashboard = ({ user, logout }) => {
         }) 
       });
       const data = await res.json();
-      setTxnId(data.txnId); // Display QR code
+      setTxnId(data.txnId); 
       setCart([]);
       refreshData();
     } catch (err) {
@@ -458,33 +539,28 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <header className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
-  <div className="flex items-center gap-2">
-    {view !== 'menu' && (
-      <button 
-        onClick={() => setView('menu')} 
-        className="p-2 bg-slate-100 rounded-full"
-      >
-        <ChevronLeft size={18}/>
-      </button>
-    )}
-    <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
-    <div className="flex flex-col">
-      <span className="font-bold text-sm truncate">
-        {user?.name?.replace(/_/g, ' ')}
-      </span>
-      <span className="text-xs text-slate-500 truncate">
-        {user?.location?.replace(/_/g, ' ')}
-      </span>
-    </div>
-  </div>
-  <button onClick={logout} className="text-slate-400">
-    <LogOut size={20}/>
-  </button>
-</header>
+        <div className="flex items-center gap-2">
+          {view !== 'menu' && (
+            <button onClick={() => setView('menu')} className="p-2 bg-slate-100 rounded-full">
+              <ChevronLeft size={18}/>
+            </button>
+          )}
+          <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
+          <div className="flex flex-col">
+            <span className="font-bold text-sm truncate uppercase tracking-tight text-slate-800">
+              {user?.name?.replace(/_/g, ' ')}
+            </span>
+            <span className="text-[10px] font-bold text-blue-600 truncate bg-blue-50 px-1.5 rounded w-fit">
+              {user?.location?.replace(/_/g, ' ')}
+            </span>
+          </div>
+        </div>
+        <button onClick={logout} className="text-slate-400 p-2"><LogOut size={20}/></button>
+      </header>
 
-      <div className="p-4 flex-1 max-w-md mx-auto w-full">
+      <main className="p-4 flex-1 max-w-md mx-auto w-full">
         {status && (
           <div className="p-4 mb-4 bg-green-600 text-white rounded-xl text-center font-bold flex items-center justify-center gap-2 shadow-lg animate-bounce">
             <CheckCircle2 size={20} /> {status.msg}
@@ -494,27 +570,25 @@ const ClinicDashboard = ({ user, logout }) => {
         {view === 'menu' && (
           <div className="grid gap-3">
             <button onClick={() => setView('usage')} className="bg-blue-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
-              <Minus size={28}/> <div className="text-left"><h2 className="font-bold">Record Usage</h2><p className="text-[10px] opacity-70 italic tracking-wider">Deduct items from inventory</p></div>
+              <Minus size={28}/> <div className="text-left"><h2 className="font-bold text-lg">Record Usage</h2><p className="text-xs opacity-80">Deduct items from inventory</p></div>
             </button>
-            <button onClick={() => setView('scanner')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm active:scale-95 transition">
-              <QrCode size={28} className="text-green-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Receive Stock</h2><p className="text-[10px] text-slate-400">Scan QR or enter TXN ID</p></div>
+            <button onClick={() => setView('scanner')} className="bg-white p-6 rounded-2xl border-2 flex items-center gap-4 shadow-sm active:scale-95 transition">
+              <QrCode size={28} className="text-green-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Receive Stock</h2><p className="text-xs text-slate-400 font-medium">Scan QR or enter TXN ID</p></div>
             </button>
             <button onClick={() => setView('transfer_out')} className="bg-orange-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
-      <ArrowUpFromLine size={28}/> 
-      <div className="text-left">
-        <h2 className="font-bold">Transfer Out</h2>
-        <p className="text-[10px] opacity-70 italic tracking-wider">Send stock to another clinic</p>
-      </div>
-    </button>
-            <button onClick={() => setView('restock')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
-              <AlertTriangle size={28} className="text-orange-500"/> <div className="text-left"><h2 className="font-bold text-slate-700">Restock List</h2><p className="text-[10px] text-slate-400">Items below minimum stock</p></div>
+              <ArrowUpFromLine size={28}/> <div className="text-left"><h2 className="font-bold text-lg">Transfer Out</h2><p className="text-xs opacity-80">Send stock to another clinic</p></div>
             </button>
-            <button onClick={() => setView('history')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
-              <History size={28} className="text-purple-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Activity History</h2><p className="text-[10px] text-slate-400">View logs</p></div>
-            </button>
-            <button onClick={() => setView('stock')} className="bg-white p-6 rounded-2xl border flex items-center gap-4 shadow-sm">
-              <Package size={28} className="text-slate-500"/> <div className="text-left"><h2 className="font-bold text-slate-700">Full Inventory</h2><p className="text-[10px] text-slate-400">Check all item levels</p></div>
-            </button>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+                <button onClick={() => setView('restock')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm">
+                    <AlertTriangle size={24} className="text-orange-500"/> <h2 className="font-bold text-slate-700 text-sm">Restock</h2>
+                </button>
+                <button onClick={() => setView('history')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm">
+                    <History size={24} className="text-purple-600"/> <h2 className="font-bold text-slate-700 text-sm">History</h2>
+                </button>
+                <button onClick={() => setView('stock')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm col-span-2">
+                    <div className="flex items-center gap-3"><Package size={24} className="text-slate-500"/> <h2 className="font-bold text-slate-700 text-sm">Full Inventory List</h2></div>
+                </button>
+            </div>
           </div>
         )}
 
@@ -558,7 +632,9 @@ const ClinicDashboard = ({ user, logout }) => {
                 {inventory
   .filter(i => {
     const term = searchTerm.toLowerCase();
-    return (
+    const hasStock = (i[locKey] || 0) > 0;
+
+    return hasStock && (
       i.Item_Name?.toLowerCase().includes(term) ||
       i.Category?.toLowerCase().includes(term) ||
       i.Code?.toString().includes(term)
@@ -731,9 +807,9 @@ const ClinicDashboard = ({ user, logout }) => {
             {i[locKey] || 0}
           </span>
         </div>
-      ))}
-  </div>
-)}
+        ))}
+      </div>
+      )}
 
             {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
               <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
@@ -743,49 +819,193 @@ const ClinicDashboard = ({ user, logout }) => {
             ))}
 
             {view === 'history' && (
-              <div className="space-y-4">
+  <div className="space-y-4">
     {/* Tab Switcher */}
     <div className="flex bg-slate-200 p-1 rounded-xl">
       <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
       <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
     </div>
 
-    <div className="space-y-2">
-      {histTab === 'in' ? (
-        history.transfers?.map((t, idx) => (
-          <div 
-            key={idx} 
-            onClick={() => setSelectedTxn(t)} // Click to open details
-            className="p-4 bg-white border rounded-xl flex items-center justify-between hover:border-blue-300 cursor-pointer transition shadow-sm active:scale-95"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-full ${t.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
-                <ArrowDownToLine size={18} />
-              </div>
-              <div className="text-xs">
-                <b className="text-slate-700">{t.TransactionID}</b>
-                <p className="text-[10px] text-slate-400">From: {t.From.replace(/_/g, ' ')}</p>
-              </div>
+    {/* --- DATE FILTER & PDF SECTION --- */}
+    <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
+      <div className="flex justify-between items-center">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter & Export</h3>
+        {(startDate || endDate) && (
+          <button onClick={() => {setStartDate(""); setEndDate("");}} className="text-[10px] text-red-500 font-bold">Reset</button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full text-xs p-2 border rounded-lg bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-[9px] text-slate-400 ml-1">End Date</p>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full text-xs p-2 border rounded-lg bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+      </div>
+      <button 
+  onClick={() => {
+    const doc = new jsPDF();
+    const title = histTab === 'in' ? "Incoming Stock Report" : "Clinic Usage Report";
+    
+    // 1. Filter Data based on current Date Picker
+    const rawData = histTab === 'in' ? history.transfers : history.usage;
+    const dataToExport = (rawData || []).filter(item => {
+      const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+      return (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
+    });
+
+    if (dataToExport.length === 0) return alert("No data to export for selected range.");
+
+    // --- PAGE 1: FULL LOGS ---
+    doc.setFontSize(18);
+    doc.text(title, 14, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`, 14, 28);
+    doc.text(`Generated by: ${user.name}`, 14, 33);
+
+    const tableHeaders = histTab === 'in' 
+      ? [["Date", "ID", "From", "Status"]] 
+      : [["Date", "Item Name", "Qty", "User"]];
+
+    const tableRows = dataToExport.map(item => histTab === 'in' 
+      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.Status]
+      : [new Date(item.Timestamp).toLocaleDateString(), item.Item_Name, item.Qty, item.User || 'Staff']
+    );
+
+    doc.autoTable({ 
+      head: tableHeaders, 
+      body: tableRows, 
+      startY: 40, 
+      theme: 'striped',
+      headStyles: { fillColor: [51, 65, 85] } // Slate-700
+    });
+
+    // --- PAGE 2: SUMMARY PAGE ---
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.setTextColor(0);
+    doc.text("Executive Summary", 14, 20);
+    doc.setFontSize(10);
+    doc.text("Total quantities accumulated for the selected period:", 14, 28);
+
+    let summaryHeaders, summaryRows;
+
+    if (histTab === 'out') {
+      // Aggregate Usage: Sum Qty per Item Name
+      const totals = dataToExport.reduce((acc, curr) => {
+        acc[curr.Item_Name] = (acc[curr.Item_Name] || 0) + Number(curr.Qty);
+        return acc;
+      }, {});
+      
+      summaryHeaders = [["Item Description", "Total Qty Used"]];
+      summaryRows = Object.entries(totals).sort((a,b) => b[1] - a[1]).map(([name, qty]) => [name, qty]);
+    } else {
+      // Aggregate Incoming: Count per Status
+      const stats = dataToExport.reduce((acc, curr) => {
+        acc[curr.Status] = (acc[curr.Status] || 0) + 1;
+        return acc;
+      }, {});
+      
+      summaryHeaders = [["Transaction Status", "Count"]];
+      summaryRows = Object.entries(stats).map(([status, count]) => [status, count]);
+    }
+
+    doc.autoTable({
+      head: summaryHeaders,
+      body: summaryRows,
+      startY: 35,
+      theme: 'grid',
+      headStyles: { fillColor: [37, 99, 235] }, // Blue-600
+      columnStyles: { 1: { halign: 'center', fontStyle: 'bold' } }
+    });
+
+    // Footer on Summary Page
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(9);
+    doc.setTextColor(150);
+    doc.text("End of Official Report", 105, finalY, { align: "center" });
+
+    doc.save(`${histTab}_Report_${user.location}_${new Date().toISOString().split('T')[0]}.pdf`);
+  }}
+  className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition"
+>
+  <Download size={14} /> Download PDF with Summary
+</button>
+    </div>
+
+    <div className="space-y-6">
+      {(() => {
+        // 1. Pick and FILTER dataset based on dates
+        const rawData = histTab === 'in' ? history.transfers : history.usage;
+        const dataToGroup = (rawData || []).filter(item => {
+          const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+          if (startDate && itemDate < startDate) return false;
+          if (endDate && itemDate > endDate) return false;
+          return true;
+        });
+
+        if (dataToGroup.length === 0) {
+          return <p className="text-center text-slate-400 text-xs py-10">No records found for this period.</p>;
+        }
+
+        // 2. Group by Month-Year
+        const grouped = dataToGroup.reduce((acc, item) => {
+          const rawDate = item.CreatedAt || item.Timestamp;
+          const date = new Date(rawDate);
+          const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+          if (!acc[monthYear]) acc[monthYear] = [];
+          acc[monthYear].push(item);
+          return acc;
+        }, {});
+
+        // 3. Sort months (newest first)
+        const sortedMonths = Object.keys(grouped).sort(
+          (a, b) => new Date(grouped[b][0].CreatedAt || grouped[b][0].Timestamp) - new Date(grouped[a][0].CreatedAt || grouped[a][0].Timestamp)
+        );
+
+        // 4. Render grouped view
+        return sortedMonths.map((month) => (
+          <div key={month} className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{month}</span>
+              <div className="h-px flex-1 bg-slate-200"></div>
             </div>
-            <div className="text-right">
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${t.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                {t.Status}
-              </span>
-              <p className="text-[9px] text-slate-400 mt-1">{t.CreatedAt ? new Date(t.CreatedAt).toLocaleDateString() : ''}</p>
-            </div>
+
+            {grouped[month].map((item, idx) =>
+              histTab === 'in' ? (
+                <div key={item.TransactionID || idx} onClick={() => setSelectedTxn(item)} className="p-4 bg-white border rounded-xl flex items-center justify-between hover:border-blue-300 cursor-pointer transition shadow-sm active:scale-95">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${item.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><ArrowDownToLine size={18} /></div>
+                    <div className="text-xs">
+                      <b className="text-slate-700">{item.TransactionID}</b>
+                      <p className="text-[10px] text-slate-400">From: {item.From?.replace(/_/g, ' ')}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{item.Status}</span>
+                    <p className="text-[9px] text-slate-400 mt-1">{new Date(item.CreatedAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              ) : (
+                <div key={item.Item_Name + item.Timestamp + idx} className="p-4 bg-white border rounded-xl flex items-center gap-3 shadow-sm">
+                  <div className="p-2 bg-red-50 text-red-600 rounded-full"><ArrowUpFromLine size={18} /></div>
+                  <div className="text-xs">
+                    <b className="text-slate-700">{item.Item_Name}</b>
+                    <p className="text-[10px] text-slate-400">{new Date(item.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Qty: {item.Qty}</p>
+                  </div>
+                  <div className="ml-auto text-right">
+                     <p className="text-[9px] text-slate-400">{new Date(item.Timestamp).toLocaleDateString()}</p>
+                     <p className="text-[8px] text-blue-500 font-bold uppercase">{item.User || 'Staff'}</p>
+                  </div>
+                </div>
+              )
+            )}
           </div>
-        ))
-      ) : (
-        history.usage?.map((u, idx) => (
-          <div key={idx} className="p-4 bg-white border rounded-xl flex items-center gap-3 shadow-sm">
-            <div className="p-2 bg-red-50 text-red-600 rounded-full"><ArrowUpFromLine size={18} /></div>
-            <div className="text-xs">
-              <b className="text-slate-700">{u.Item_Name}</b>
-              <p className="text-[10px] text-slate-400">{new Date(u.Timestamp).toLocaleString()} • Qty: {u.Qty}</p>
-            </div>
-          </div>
-        ))
-      )}
+        ));
+      })()}
     </div>
 
     {/* --- TRANSACTION DETAILS MODAL --- */}
@@ -794,40 +1014,67 @@ const ClinicDashboard = ({ user, logout }) => {
         <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h3 className="font-bold text-lg text-slate-800">{selectedTxn.TransactionID}</h3>
+              <h3 className="font-bold text-lg text-slate-800">
+                {selectedTxn.TransactionID}
+              </h3>
               <p className="text-xs text-slate-400">Transaction Details</p>
             </div>
-            <button onClick={() => setSelectedTxn(null)} className="p-2 bg-slate-100 rounded-full text-slate-400">✕</button>
+            <button
+              onClick={() => setSelectedTxn(null)}
+              className="p-2 bg-slate-100 rounded-full text-slate-400"
+            >
+              ✕
+            </button>
           </div>
 
           <div className="space-y-4 mb-6">
             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl text-xs">
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Recipient</p>
-                <p className="text-slate-700">{selectedTxn.RecipientName || 'Pending'}</p>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">
+                  Recipient
+                </p>
+                <p className="text-slate-700">
+                  {selectedTxn.RecipientName || 'Pending'}
+                </p>
               </div>
               <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">Received At</p>
+                <p className="text-slate-400 font-bold uppercase text-[9px]">
+                  Received At
+                </p>
                 <p className="text-slate-700">
-                  {selectedTxn.ReceivedAt ? new Date(selectedTxn.ReceivedAt).toLocaleString() : 'Not received'}
+                  {selectedTxn.ReceivedAt
+                    ? new Date(selectedTxn.ReceivedAt).toLocaleString()
+                    : 'Not received'}
                 </p>
               </div>
             </div>
 
             <div>
-              <p className="text-slate-400 font-bold uppercase text-[9px] mb-2 px-1">Items Included</p>
+              <p className="text-slate-400 font-bold uppercase text-[9px] mb-2 px-1">
+                Items Included
+              </p>
               <div className="max-h-40 overflow-y-auto border rounded-xl divide-y">
-                {JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
-                  <div key={i} className="p-3 flex justify-between items-center text-sm">
-                    <span className="text-slate-700 font-medium">{item.name}</span>
-                    <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold text-xs">x{item.qty}</span>
+                {JSON.parse(selectedTxn.ItemsJSON || '[]').map((item, i) => (
+                  <div
+                    key={i}
+                    className="p-3 flex justify-between items-center text-sm"
+                  >
+                    <span className="text-slate-700 font-medium">
+                      {item.name}
+                    </span>
+                    <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold text-xs">
+                      x{item.qty}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <button onClick={() => setSelectedTxn(null)} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition">
+          <button
+            onClick={() => setSelectedTxn(null)}
+            className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition"
+          >
             Close Details
           </button>
         </div>
@@ -837,7 +1084,7 @@ const ClinicDashboard = ({ user, logout }) => {
 )}
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 };
