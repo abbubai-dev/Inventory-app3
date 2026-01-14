@@ -42,13 +42,15 @@ const Login = ({ setUser }) => {
       if (data.authenticated) {
         // 2. Password correct, now trigger OTP
         const userObj = setupData.users.find(u => u.username === selectedUser);
+        console.log("Sending OTP to:", userObj.email); // IS THIS PRINTING A REAL EMAIL?
         const otpRes = await fetch(`${API_URL}?action=sendOTP&email=${userObj.email}`);
         const otpData = await otpRes.json();
+        console.log("Server Response:", otpData);
 
-        if (otpData.success) {
+        if (otpData.success === true) {
           setStep(2); // Move to OTP entry
         } else {
-          alert("Failed to send security code. Check user email setup.");
+          alert("Error: " + (otpData.message || "Failed to send security code. Check user email setup."));
         }
       } else {
         alert("Login failed: Invalid Password");
