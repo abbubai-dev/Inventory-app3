@@ -54,50 +54,67 @@ const Login = ({ setUser }) => {
   };
 
   return (
-    <div className="flex items-center justify-center h-screen bg-slate-100 p-4">
-      <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border">
-        <div className="flex justify-center mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-500 via-indigo-600 to-purple-700 p-6">
+      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
+        <form onSubmit={handleLogin} className="w-full max-w-md bg-white/10 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
+          <div className="flex justify-center mb-6">
           <img src="/logo_PKPDKK.png" alt="PKPDKK Logo" className="h-20 w-auto object-contain" />
-        </div>
-        <h1 className="text-xl font-bold mb-6 text-center text-slate-800">Sistem Inventori PKPDKK</h1>
+          </div>
+          <h1 className="text-xl font-bold mb-6 text-center text-slate-800">Sistem Inventori PKPDKK</h1>
         
-        <div className="space-y-4">
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Location</label>
-            <select 
-              className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedLoc}
-              onChange={(e) => { setSelectedLoc(e.target.value); setSelectedUser(""); }}
-              required
-            >
-              <option value="">Select Location...</option>
-              {setupData.locations.map(l => <option key={l} value={l}>{l}</option>)}
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] font-bold text-slate-800 uppercase ml-1">Location</label>
+              <select className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none focus:bg-white/40 transition mb-4 cursor-pointer appearance-none shadow-lg"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 1rem center',
+                  backgroundSize: '1.5em'
+                }}
+                value={selectedLoc}
+                onChange={(e) => { setSelectedLoc(e.target.value); setSelectedUser(""); }}
+                required
+              >
+              <option value="" className="text-slate-900">Select Location...</option>
+              {setupData.locations.map(l => (
+              <option key={l} value={l} className="text-slate-900">
+              {l}
+              </option>
+                ))}
             </select>
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">User</label>
+            <label className="text-[10px] font-bold text-slate-800 uppercase ml-1">User</label>
             <select 
-              className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none focus:bg-white/40 transition mb-4 cursor-pointer appearance-none shadow-lg"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 1rem center',
+                  backgroundSize: '1.5em'
+                }}
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
               disabled={!selectedLoc}
               required
             >
-              <option value="">Select Staff...</option>
+              <option value="" className='text-slate-900'>Select Staff...</option>
               {setupData.users.filter(u => u.location === selectedLoc).map(u => (
-                <option key={u.username} value={u.username}>{u.username} ({u.role})</option>
+                <option key={u.username} value={u.username} className="text-slate-900">{u.username} ({u.role})</option>
               ))}
             </select>
           </div>
 
-          <input name="password" type="password" placeholder="Password" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required disabled={loading} />
+          <input name="password" type="password" placeholder="Password" className="w-full p-4 bg-white/20 border border-white/30 rounded-2xl placeholder:text-white/70 text-white outline-none focus:bg-white/30 transition mb-4" required disabled={loading} />
           
           <button type="submit" disabled={loading || !selectedUser} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
             {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Sign In"}
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 };
@@ -255,6 +272,7 @@ const AdminDashboard = ({ user, logout }) => {
       action: 'addUser',
       username: e.target.username.value,
       password: e.target.password.value,
+      email: e.target.email.value,
       role: e.target.role.value,
       location: e.target.location.value
     };
@@ -287,6 +305,8 @@ const AdminDashboard = ({ user, logout }) => {
             <form onSubmit={handleAddUser} className="space-y-4">
               <input name="username" placeholder="Full Name / Username" className="w-full p-3 border rounded-xl" required />
               <input name="password" type="password" placeholder="Password" className="w-full p-3 border rounded-xl" required />
+              {/* NEW: Email Field */}
+              <input name="email" type="email" placeholder="Staff Email (for notifications)" className="w-full p-3 border rounded-xl" required />
               <div className="grid grid-cols-2 gap-4">
                 <select name="role" className="p-3 border rounded-xl">
                   <option>Clinic</option>
@@ -345,6 +365,7 @@ const ClinicDashboard = ({ user, logout }) => {
   const [targetLoc, setTargetLoc] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [expandedMonths, setExpandedMonths] = useState({});
 
   const locKey = user.location;
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
@@ -539,7 +560,7 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-linear-to-r from-blue-900 to-indigo-400 flex flex-col font-sans">
       <header className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-2">
           {view !== 'menu' && (
@@ -568,29 +589,66 @@ const ClinicDashboard = ({ user, logout }) => {
         )}
 
         {view === 'menu' && (
-          <div className="grid gap-3">
-            <button onClick={() => setView('usage')} className="bg-blue-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
-              <Minus size={28}/> <div className="text-left"><h2 className="font-bold text-lg">Record Usage</h2><p className="text-xs opacity-80">Deduct items from inventory</p></div>
-            </button>
-            <button onClick={() => setView('scanner')} className="bg-white p-6 rounded-2xl border-2 flex items-center gap-4 shadow-sm active:scale-95 transition">
-              <QrCode size={28} className="text-green-600"/> <div className="text-left"><h2 className="font-bold text-slate-700">Receive Stock</h2><p className="text-xs text-slate-400 font-medium">Scan QR or enter TXN ID</p></div>
-            </button>
-            <button onClick={() => setView('transfer_out')} className="bg-orange-600 text-white p-6 rounded-2xl flex items-center gap-4 shadow-xl active:scale-95 transition">
-              <ArrowUpFromLine size={28}/> <div className="text-left"><h2 className="font-bold text-lg">Transfer Out</h2><p className="text-xs opacity-80">Send stock to another clinic</p></div>
-            </button>
-            <div className="grid grid-cols-2 gap-3 mt-2">
-                <button onClick={() => setView('restock')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm">
-                    <AlertTriangle size={24} className="text-orange-500"/> <h2 className="font-bold text-slate-700 text-sm">Restock</h2>
-                </button>
-                <button onClick={() => setView('history')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm">
-                    <History size={24} className="text-purple-600"/> <h2 className="font-bold text-slate-700 text-sm">History</h2>
-                </button>
-                <button onClick={() => setView('stock')} className="bg-white p-4 rounded-xl border flex flex-col gap-2 shadow-sm col-span-2">
-                    <div className="flex items-center gap-3"><Package size={24} className="text-slate-500"/> <h2 className="font-bold text-slate-700 text-sm">Full Inventory List</h2></div>
-                </button>
-            </div>
-          </div>
-        )}
+  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    
+    {/* Welcome & Stats Header */}
+    <div className="bg-linear-to-r from-blue-600 to-indigo-700 p-6 rounded-4xl text-white shadow-lg shadow-blue-200">
+      <h2 className="text-xl font-bold">Hello, {user.name}</h2>
+      <p className="opacity-80 text-xs">Manage inventory for {user.location}</p>
+      
+      <div className="flex gap-4 mt-4">
+        <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
+          <p className="text-[10px] uppercase font-bold opacity-70">Low Stock</p>
+          <p className="text-xl font-black">{inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).length}</p>
+        </div>
+        <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
+          <p className="text-[10px] uppercase font-bold opacity-70">Today's Usage</p>
+          <p className="text-xl font-black">{history.usage?.filter(u => new Date(u.Timestamp).toDateString() === new Date().toDateString()).length || 0}</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Primary Actions Grid */}
+    <div className="grid grid-cols-1 gap-4">
+      <button onClick={() => setView('usage')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
+        <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+          <Minus size={24} strokeWidth={2.5}/>
+        </div>
+        <div className="text-left">
+          <h2 className="font-bold text-slate-800">Record Usage</h2>
+          <p className="text-xs text-slate-400">Deduct items from your shelf</p>
+        </div>
+      </button>
+
+      <button onClick={() => setView('transfer_out')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
+        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
+          <ArrowUpFromLine size={24} strokeWidth={2.5}/>
+        </div>
+        <div className="text-left">
+          <h2 className="font-bold text-slate-800">Transfer Out</h2>
+          <p className="text-xs text-slate-400">Send stock to another clinic</p>
+        </div>
+      </button>
+    </div>
+
+    {/* Secondary Actions Row */}
+    <div className="grid grid-cols-2 gap-4">
+      <button onClick={() => setView('scanner')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
+        <QrCode size={24} className="text-green-600" />
+        <span className="text-xs font-bold text-slate-700">Receive</span>
+      </button>
+      <button onClick={() => setView('history')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
+        <History size={24} className="text-purple-600" />
+        <span className="text-xs font-bold text-slate-700">History</span>
+      </button>
+    </div>
+
+    {/* Footer Action */}
+    <button onClick={() => setView('stock')} className="w-full p-4 bg-slate-100 rounded-2xl text-slate-500 text-xs font-bold flex items-center justify-center gap-2 border border-dashed border-slate-300">
+      <Package size={16} /> View Full Inventory List
+    </button>
+  </div>
+)}
 
         {/* --- LIST VIEWS WITH SKELETONS --- */}
         {view !== 'menu' && view !== 'scanner' && view !== 'usage_cart' && loading ? (
@@ -602,7 +660,7 @@ const ClinicDashboard = ({ user, logout }) => {
             <SkeletonItem />
             <SkeletonItem />
           </div>
-        ) : (
+          ) : (
           <>
             {view === 'scanner' && (
               <div className="space-y-4">
@@ -625,46 +683,42 @@ const ClinicDashboard = ({ user, logout }) => {
               </div>
             )}
 
-            {view === 'usage' && (
-              <div className="space-y-3">
-                <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name, Category, ID.." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
-                <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
-                {inventory
-  .filter(i => {
-    const term = searchTerm.toLowerCase();
-    const hasStock = (i[locKey] || 0) > 0;
+          {view === 'usage' && (
+            <div className="space-y-3">
+              <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name, Category, ID.." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
+              <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
+              {inventory
+                .filter(i => {
+                  const term = searchTerm.toLowerCase();
+                  const hasStock = (i[locKey] || 0) > 0;
 
-    return hasStock && (
-      i.Item_Name?.toLowerCase().includes(term) ||
-      i.Category?.toLowerCase().includes(term) ||
-      i.Code?.toString().includes(term)
-    );
-  })
-  .map(i => (
-    <div
-      key={i.Code}
-      className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm"
-    >
-      <div>
-        <p className="text-[10px] text-slate-400 font-mono font-bold">#{i.Code} - {i.Category}</p>
-        <h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3>
-        <p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p>
-      </div>
-      <button
-        onClick={() => {
-          const q = prompt("Qty used?");
-          if (q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]);
-        }}
-        className="p-3 bg-blue-50 text-blue-600 rounded-xl"
-      >
-        <Plus size={20} />
-      </button>
-    </div>
-  ))}
+                  return hasStock && (
+                    i.Item_Name?.toLowerCase().includes(term) ||
+                    i.Category?.toLowerCase().includes(term) ||
+                    i.Code?.toString().includes(term)
+                  );
+                })
+                .map(i => (
+                  <div key={i.Code} className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-mono font-bold">#{i.Code} - {i.Category}</p>
+                      <h3 className="text-sm font-bold text-slate-700">{i.Item_Name}</h3>
+                      <p className="text-xs text-blue-500">Stock: {i[locKey] || 0}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                      const q = prompt("Qty used?");
+                      if (q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]);
+                      }}
+                      className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                      <Plus size={20} />
+                    </button>
+                  </div>
+              ))}
               </div>
-            )}
+          )}
 
-            {view === 'usage_cart' && (
+          {view === 'usage_cart' && (
               <div className="space-y-4">
                 <h2 className="font-bold text-lg">Confirm Usage</h2>
                 <div className="space-y-2">
@@ -674,10 +728,11 @@ const ClinicDashboard = ({ user, logout }) => {
                   {actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Record Usage Now"}
                 </button>
               </div>
-            )}
+            )
+          }
 
-            {/* --- TRANSFER OUT VIEW --- */}
-        {view === 'transfer_out' && (
+          {/* --- TRANSFER OUT VIEW --- */}
+          {view === 'transfer_out' && (
           <div className="space-y-4">
             {!txnId ? (
               <>
@@ -694,58 +749,53 @@ const ClinicDashboard = ({ user, logout }) => {
                 </div>
                 
                 <div className="relative">
-  <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
-  <input 
-    placeholder="Find items to send..." 
-    className="w-full pl-10 pr-4 py-3 border rounded-xl" 
-    onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
-  />
-</div>
+                  <Search className="absolute left-3 top-3 text-slate-400" size={18}/>
+                  <input 
+                  placeholder="Find items to send..." 
+                  className="w-full pl-10 pr-4 py-3 border rounded-xl" 
+                  onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+                </div>
 
-<div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center">
-  <span className="text-xs font-bold text-blue-600">
-    {cart.length} items in transfer
-  </span>
-  <button 
-    onClick={() => setView('transfer_cart')} 
-    className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold"
-  >
-    Review Transfer
-  </button>
-</div>
+                <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center">
+                  <span className="text-xs font-bold text-blue-600">
+                    {cart.length} items in transfer
+                  </span>
+                 <button 
+                    onClick={() => setView('transfer_cart')} 
+                    className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold">
+                    Review Transfer
+                  </button>
+                </div>
 
-{inventory
-  .filter(i => {
-    const term = searchTerm.toLowerCase();
-    return (
-      i.Item_Name?.toLowerCase().includes(term) ||
-      i.Category?.toLowerCase().includes(term) ||
-      i.Code?.toString().includes(term)
-    );
-  })
-  .map(i => (
-    <div 
-      key={i.Code} 
-      className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm"
-    >
-      <div>
-        <p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p>
-        <h3 className="text-sm font-bold">{i.Item_Name}</h3>
-        <p className="text-xs text-slate-500">Category: {i.Category}</p>
-        <p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p>
-      </div>
-      <button 
-        onClick={() => { 
-          const q = prompt(`How many ${i.Item_Name} to send?`); 
-          if(q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]); 
-        }} 
-        className="p-3 bg-blue-50 text-blue-600 rounded-xl"
-      >
-        <Plus size={20}/>
-      </button>
-    </div>
-  ))}
-              </>
+      {inventory
+        .filter(i => {
+          const term = searchTerm.toLowerCase();
+          return (
+            i.Item_Name?.toLowerCase().includes(term) ||
+            i.Category?.toLowerCase().includes(term) ||
+            i.Code?.toString().includes(term)
+          );
+        })
+        .map(i => (
+          <div 
+            key={i.Code} 
+            className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
+            <div>
+              <p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p>
+              <h3 className="text-sm font-bold">{i.Item_Name}</h3>
+              <p className="text-xs text-slate-500">Category: {i.Category}</p>
+              <p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p>
+            </div>
+            <button onClick={() => { 
+              const q = prompt(`How many ${i.Item_Name} to send?`); 
+              if(q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]); 
+              }} className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+              <Plus size={20}/>
+            </button>
+          </div>
+        ))
+      }
+      </>
             ) : (
               <div className="bg-white p-8 rounded-3xl border shadow-xl text-center space-y-4">
                 <h3 className="font-bold text-lg">Transfer Ready</h3>
@@ -772,316 +822,374 @@ const ClinicDashboard = ({ user, logout }) => {
         )}
 
             {view === 'stock' && (
-  <div className="space-y-2">
-    <input 
-      placeholder="Search all items..." 
-      className="w-full p-3 border rounded-xl mb-4 shadow-sm" 
-      onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
-    />
-    {inventory
-      .filter(i => {
+        <div className="space-y-2">
+        <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+        {inventory
+        .filter(i => {
         const term = searchTerm.toLowerCase();
         return (
           i.Item_Name?.toLowerCase().includes(term) ||
           i.Category?.toLowerCase().includes(term) ||
           i.Code?.toString().includes(term)
-        );
-      })
-      .map(i => (
-        <div 
-          key={i.Code} 
-          className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm"
-        >
+          );
+        })
+        .map(i => (
+        <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
           <div>
             <p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p>
             <span className="text-sm font-bold text-slate-700">{i.Item_Name}</span>
             <p className="text-xs text-slate-500">Category: {i.Category}</p>
           </div>
-          <span
-            className={`font-bold px-3 py-1 rounded-lg ${
+          <span className={`font-bold px-3 py-1 rounded-lg ${
               Number(i[locKey]) < i.MinStock
                 ? 'bg-red-100 text-red-600'
                 : 'bg-slate-100 text-slate-600'
-            }`}
-          >
+            }`} >
             {i[locKey] || 0}
           </span>
-        </div>
+          </div>
         ))}
       </div>
       )}
 
-            {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
-              <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
-                <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
-                <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
-              </div>
-            ))}
+        {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
+            <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
+              <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
+              <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
+            </div>
+          ))}
 
-            {view === 'history' && (
+    {view === 'history' && (
   <div className="space-y-4">
+
+    {/* ---------- HELPERS ---------- */}
+    {/*
+      Timezone-safe date formatter
+      Returns YYYY-MM-DD
+    */}
+    {(() => {})()}
+    
     {/* Tab Switcher */}
     <div className="flex bg-slate-200 p-1 rounded-xl">
-      <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
-      <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
+      <button
+        onClick={() => setHistTab('in')}
+        className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+          histTab === 'in'
+            ? 'bg-white shadow text-blue-600'
+            : 'text-slate-500'
+        }`}
+      >
+        Incoming
+      </button>
+      <button
+        onClick={() => setHistTab('out')}
+        className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+          histTab === 'out'
+            ? 'bg-white shadow text-blue-600'
+            : 'text-slate-500'
+        }`}
+      >
+        Usage
+      </button>
     </div>
 
-    {/* --- DATE FILTER & PDF SECTION --- */}
+    {/* ---------- DATE FILTER & PDF ---------- */}
     <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
       <div className="flex justify-between items-center">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter & Export</h3>
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          Filter & Export
+        </h3>
         {(startDate || endDate) && (
-          <button onClick={() => {setStartDate(""); setEndDate("");}} className="text-[10px] text-red-500 font-bold">Reset</button>
+          <button
+            onClick={() => {
+              setStartDate('');
+              setEndDate('');
+            }}
+            className="text-[10px] text-red-500 font-bold"
+          >
+            Reset
+          </button>
         )}
       </div>
+
       <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
+        <div>
           <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full text-xs p-2 border rounded-lg bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+          />
         </div>
-        <div className="space-y-1">
+        <div>
           <p className="text-[9px] text-slate-400 ml-1">End Date</p>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full text-xs p-2 border rounded-lg bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" />
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+          />
         </div>
       </div>
-      <button 
-  onClick={() => {
-    const doc = new jsPDF();
-    const title = histTab === 'in' ? "Incoming Stock Report" : "Clinic Usage Report";
-    
-    // 1. Filter Data based on current Date Picker
-    const rawData = histTab === 'in' ? history.transfers : history.usage;
-    const dataToExport = (rawData || []).filter(item => {
-      const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
-      return (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
-    });
 
-    if (dataToExport.length === 0) return alert("No data to export for selected range.");
+      {/* ---------- PDF EXPORT ---------- */}
+      <button
+        onClick={() => {
+          const toLocalDate = (date) =>
+            new Date(date).toLocaleDateString('en-CA');
 
-    // --- PAGE 1: FULL LOGS ---
-    doc.setFontSize(18);
-    doc.text(title, 14, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`, 14, 28);
-    doc.text(`Generated by: ${user.name}`, 14, 33);
+          const doc = new jsPDF();
+          const title =
+            histTab === 'in'
+              ? 'Incoming Stock Report'
+              : 'Clinic Usage Report';
 
-    const tableHeaders = histTab === 'in' 
-      ? [["Date", "ID", "From", "Status"]] 
-      : [["Date", "Item Name", "Qty", "User"]];
+          const rawData =
+            histTab === 'in'
+              ? history.transfers || []
+              : history.usage || [];
 
-    const tableRows = dataToExport.map(item => histTab === 'in' 
-      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.Status]
-      : [new Date(item.Timestamp).toLocaleDateString(), item.Item_Name, item.Qty, item.User || 'Staff']
-    );
+          const dataToExport = rawData.filter((item) => {
+            const d = toLocalDate(item.CreatedAt || item.Timestamp);
+            return (!startDate || d >= startDate) &&
+                   (!endDate || d <= endDate);
+          });
 
-    doc.autoTable({ 
-      head: tableHeaders, 
-      body: tableRows, 
-      startY: 40, 
-      theme: 'striped',
-      headStyles: { fillColor: [51, 65, 85] } // Slate-700
-    });
+          if (!dataToExport.length) {
+            alert('No data to export for selected range.');
+            return;
+          }
 
-    // --- PAGE 2: SUMMARY PAGE ---
-    doc.addPage();
-    doc.setFontSize(16);
-    doc.setTextColor(0);
-    doc.text("Executive Summary", 14, 20);
-    doc.setFontSize(10);
-    doc.text("Total quantities accumulated for the selected period:", 14, 28);
+          doc.setFontSize(18);
+          doc.text(title, 14, 20);
+          doc.setFontSize(10);
+          doc.setTextColor(100);
+          doc.text(
+            `Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`,
+            14,
+            28
+          );
+          doc.text(`Generated by: ${user.name}`, 14, 33);
 
-    let summaryHeaders, summaryRows;
+          const tableHeaders =
+            histTab === 'in'
+              ? [['Date', 'ID', 'From', 'Status']]
+              : [['Date', 'Item Name', 'Qty', 'User']];
 
-    if (histTab === 'out') {
-      // Aggregate Usage: Sum Qty per Item Name
-      const totals = dataToExport.reduce((acc, curr) => {
-        acc[curr.Item_Name] = (acc[curr.Item_Name] || 0) + Number(curr.Qty);
-        return acc;
-      }, {});
-      
-      summaryHeaders = [["Item Description", "Total Qty Used"]];
-      summaryRows = Object.entries(totals).sort((a,b) => b[1] - a[1]).map(([name, qty]) => [name, qty]);
-    } else {
-      // Aggregate Incoming: Count per Status
-      const stats = dataToExport.reduce((acc, curr) => {
-        acc[curr.Status] = (acc[curr.Status] || 0) + 1;
-        return acc;
-      }, {});
-      
-      summaryHeaders = [["Transaction Status", "Count"]];
-      summaryRows = Object.entries(stats).map(([status, count]) => [status, count]);
-    }
+          const tableRows = dataToExport.map((item) =>
+            histTab === 'in'
+              ? [
+                  toLocalDate(item.CreatedAt),
+                  item.TransactionID,
+                  item.From,
+                  item.Status,
+                ]
+              : [
+                  toLocalDate(item.Timestamp),
+                  item.Item_Name,
+                  item.Qty,
+                  item.User || 'Staff',
+                ]
+          );
 
-    doc.autoTable({
-      head: summaryHeaders,
-      body: summaryRows,
-      startY: 35,
-      theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235] }, // Blue-600
-      columnStyles: { 1: { halign: 'center', fontStyle: 'bold' } }
-    });
+          doc.autoTable({
+            head: tableHeaders,
+            body: tableRows,
+            startY: 40,
+            theme: 'striped',
+            headStyles: { fillColor: [51, 65, 85] },
+          });
 
-    // Footer on Summary Page
-    const finalY = doc.lastAutoTable.finalY + 10;
-    doc.setFontSize(9);
-    doc.setTextColor(150);
-    doc.text("End of Official Report", 105, finalY, { align: "center" });
+          // ---------- SUMMARY PAGE ----------
+          doc.addPage();
+          doc.setFontSize(16);
+          doc.text('Executive Summary', 14, 20);
 
-    doc.save(`${histTab}_Report_${user.location}_${new Date().toISOString().split('T')[0]}.pdf`);
-  }}
-  className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition"
->
-  <Download size={14} /> Download PDF with Summary
-</button>
+          let summaryHeaders = [];
+          let summaryRows = [];
+
+          if (histTab === 'out') {
+            const totals = dataToExport.reduce((acc, cur) => {
+              acc[cur.Item_Name] =
+                (acc[cur.Item_Name] || 0) + Number(cur.Qty);
+              return acc;
+            }, {});
+            summaryHeaders = [['Item Description', 'Total Qty Used']];
+            summaryRows = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+          } else {
+            const stats = dataToExport.reduce((acc, cur) => {
+              acc[cur.Status] = (acc[cur.Status] || 0) + 1;
+              return acc;
+            }, {});
+            summaryHeaders = [['Transaction Status', 'Count']];
+            summaryRows = Object.entries(stats);
+          }
+
+          doc.autoTable({
+            head: summaryHeaders,
+            body: summaryRows,
+            startY: 30,
+            theme: 'grid',
+            headStyles: { fillColor: [37, 99, 235] },
+          });
+
+          const pageHeight = doc.internal.pageSize.height;
+          const y = Math.min(
+            doc.lastAutoTable.finalY + 10,
+            pageHeight - 10
+          );
+
+          doc.setFontSize(9);
+          doc.setTextColor(150);
+          doc.text('End of Official Report', 105, y, {
+            align: 'center',
+          });
+
+          doc.save(
+            `${histTab}_Report_${user.location}_${toLocalDate(
+              new Date()
+            )}.pdf`
+          );
+        }}
+        className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold"
+      >
+        Download PDF with Summary
+      </button>
     </div>
 
+    {/* ---------- GROUPED HISTORY ---------- */}
     <div className="space-y-6">
       {(() => {
-        // 1. Pick and FILTER dataset based on dates
-        const rawData = histTab === 'in' ? history.transfers : history.usage;
-        const dataToGroup = (rawData || []).filter(item => {
-          const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
-          if (startDate && itemDate < startDate) return false;
-          if (endDate && itemDate > endDate) return false;
-          return true;
+        const toLocalDate = (date) =>
+          new Date(date).toLocaleDateString('en-CA');
+
+        const raw =
+          histTab === 'in'
+            ? history.transfers || []
+            : history.usage || [];
+
+        const filtered = raw.filter((item) => {
+          const d = toLocalDate(item.CreatedAt || item.Timestamp);
+          return (!startDate || d >= startDate) &&
+                 (!endDate || d <= endDate);
         });
 
-        if (dataToGroup.length === 0) {
-          return <p className="text-center text-slate-400 text-xs py-10">No records found for this period.</p>;
+        if (!filtered.length) {
+          return (
+            <p className="text-center text-slate-400 text-xs py-10">
+              No records found for this period.
+            </p>
+          );
         }
 
-        // 2. Group by Month-Year
-        const grouped = dataToGroup.reduce((acc, item) => {
-          const rawDate = item.CreatedAt || item.Timestamp;
-          const date = new Date(rawDate);
-          const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-          if (!acc[monthYear]) acc[monthYear] = [];
-          acc[monthYear].push(item);
+        const grouped = filtered.reduce((acc, item) => {
+          const date = new Date(item.CreatedAt || item.Timestamp);
+          const key = date.toLocaleString('default', {
+            month: 'long',
+            year: 'numeric',
+          });
+          acc[key] = acc[key] || [];
+          acc[key].push(item);
           return acc;
         }, {});
 
-        // 3. Sort months (newest first)
         const sortedMonths = Object.keys(grouped).sort(
-          (a, b) => new Date(grouped[b][0].CreatedAt || grouped[b][0].Timestamp) - new Date(grouped[a][0].CreatedAt || grouped[a][0].Timestamp)
+          (a, b) =>
+            Math.max(
+              ...grouped[b].map((i) =>
+                new Date(i.CreatedAt || i.Timestamp)
+              )
+            ) -
+            Math.max(
+              ...grouped[a].map((i) =>
+                new Date(i.CreatedAt || i.Timestamp)
+              )
+            )
         );
 
-        // 4. Render grouped view
-        return sortedMonths.map((month) => (
-          <div key={month} className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{month}</span>
-              <div className="h-px flex-1 bg-slate-200"></div>
-            </div>
+        return sortedMonths.map((month) => {
+          const isExpanded = expandedMonths[month] ?? true;
 
-            {grouped[month].map((item, idx) =>
-              histTab === 'in' ? (
-                <div key={item.TransactionID || idx} onClick={() => setSelectedTxn(item)} className="p-4 bg-white border rounded-xl flex items-center justify-between hover:border-blue-300 cursor-pointer transition shadow-sm active:scale-95">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-full ${item.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}><ArrowDownToLine size={18} /></div>
-                    <div className="text-xs">
+          return (
+            <div key={month} className="border-b pb-2">
+              <button
+                onClick={() =>
+                  setExpandedMonths((p) => ({
+                    ...p,
+                    [month]: !isExpanded,
+                  }))
+                }
+                className="w-full flex justify-between py-3"
+              >
+                <span className="text-[11px] font-black text-slate-500">
+                  {month}
+                </span>
+                <span className="text-[10px] font-black bg-slate-100 px-2 rounded-full">
+                  {grouped[month].length}
+                </span>
+              </button>
+
+              {isExpanded &&
+                grouped[month].map((item) =>
+                  histTab === 'in' ? (
+                    <div
+                      key={`${item.TransactionID}-${item.CreatedAt}`}
+                      onClick={() => setSelectedTxn(item)}
+                      className="p-4 bg-white border rounded-xl cursor-pointer text-slate-800">
                       <b className="text-slate-700">{item.TransactionID}</b>
-                      <p className="text-[10px] text-slate-400">From: {item.From?.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(item.CreatedAt).toLocaleDateString()}
+                      </p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{item.Status}</span>
-                    <p className="text-[9px] text-slate-400 mt-1">{new Date(item.CreatedAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              ) : (
-                <div key={item.Item_Name + item.Timestamp + idx} className="p-4 bg-white border rounded-xl flex items-center gap-3 shadow-sm">
-                  <div className="p-2 bg-red-50 text-red-600 rounded-full"><ArrowUpFromLine size={18} /></div>
-                  <div className="text-xs">
-                    <b className="text-slate-700">{item.Item_Name}</b>
-                    <p className="text-[10px] text-slate-400">{new Date(item.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Qty: {item.Qty}</p>
-                  </div>
-                  <div className="ml-auto text-right">
-                     <p className="text-[9px] text-slate-400">{new Date(item.Timestamp).toLocaleDateString()}</p>
-                     <p className="text-[8px] text-blue-500 font-bold uppercase">{item.User || 'Staff'}</p>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        ));
+
+                  ) : (
+                    <div
+                      key={`${item.Item_Name}-${item.Timestamp}`}
+                      className="p-4 bg-white border rounded-xl"
+                    >
+                      <b className="text-slate-700">{item.Item_Name}</b>
+                    </div>
+                  )
+                )}
+            </div>
+          );
+        });
       })()}
     </div>
 
-    {/* --- TRANSACTION DETAILS MODAL --- */}
+    {/* ---------- MODAL ---------- */}
     {selectedTxn && (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-in slide-in-from-bottom">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="font-bold text-lg text-slate-800">
-                {selectedTxn.TransactionID}
-              </h3>
-              <p className="text-xs text-slate-400">Transaction Details</p>
-            </div>
-            <button
-              onClick={() => setSelectedTxn(null)}
-              className="p-2 bg-slate-100 rounded-full text-slate-400"
-            >
-              ✕
-            </button>
-          </div>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+        <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+          <h3 className="font-bold">{selectedTxn.TransactionID}</h3>
 
-          <div className="space-y-4 mb-6">
-            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl text-xs">
-              <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">
-                  Recipient
-                </p>
-                <p className="text-slate-700">
-                  {selectedTxn.RecipientName || 'Pending'}
-                </p>
+          {(() => {
+            let items = [];
+            try {
+              items = JSON.parse(selectedTxn.ItemsJSON || '[]');
+            } catch {
+              items = [];
+            }
+            return items.map((i, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span>{i.name}</span>
+                <span>x{i.qty}</span>
               </div>
-              <div>
-                <p className="text-slate-400 font-bold uppercase text-[9px]">
-                  Received At
-                </p>
-                <p className="text-slate-700">
-                  {selectedTxn.ReceivedAt
-                    ? new Date(selectedTxn.ReceivedAt).toLocaleString()
-                    : 'Not received'}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-slate-400 font-bold uppercase text-[9px] mb-2 px-1">
-                Items Included
-              </p>
-              <div className="max-h-40 overflow-y-auto border rounded-xl divide-y">
-                {JSON.parse(selectedTxn.ItemsJSON || '[]').map((item, i) => (
-                  <div
-                    key={i}
-                    className="p-3 flex justify-between items-center text-sm"
-                  >
-                    <span className="text-slate-700 font-medium">
-                      {item.name}
-                    </span>
-                    <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold text-xs">
-                      x{item.qty}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+            ));
+          })()}
 
           <button
             onClick={() => setSelectedTxn(null)}
-            className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition"
-          >
-            Close Details
+            className="mt-4 w-full bg-slate-800 text-slate-400 py-2 rounded">
+            Close
           </button>
         </div>
       </div>
     )}
   </div>
 )}
+
           </>
         )}
       </main>
