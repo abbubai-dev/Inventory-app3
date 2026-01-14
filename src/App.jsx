@@ -10,7 +10,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const API_URL = import.meta.env.VITE_APP_API_URL;
+const API_URL = "/.netlify/functions/inventory-proxy";
 
 // --- LOGIN COMPONENT WITH DROPDOWNS ---
 const Login = ({ setUser }) => {
