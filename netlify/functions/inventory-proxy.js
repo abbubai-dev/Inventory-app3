@@ -2,7 +2,7 @@ const axios = require('axios'); // You may need to run: npm install axios
 
 exports.handler = async (event, context) => {
   // 1. Get the Apps Script URL from your environment variables (Security best practice)
-  const API_URL = import.meta.env.VITE_APP_API_URL;
+  const API_URL = process.env.GOOGLE_SCRIPT_URL || process.env.VITE_APP_API_URL;
   
   // 2. Extract query parameters from the React request
   const queryString = new URLSearchParams(event.queryStringParameters).toString();
