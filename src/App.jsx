@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { 
   Plus, Minus, QrCode, LogOut, Package, Search, 
-  ChevronLeft, AlertTriangle, History, ArrowDownToLine, 
+  ChevronLeft, ChevronUp, ChevronDown, AlertTriangle, History, ArrowDownToLine, 
   ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -19,30 +19,37 @@ const Login = ({ setUser }) => {
   const [setupData, setSetupData] = useState({ locations: [], users: [] });
   const [selectedLoc, setSelectedLoc] = useState("");
   const [selectedUser, setSelectedUser] = useState("");
+  const [password, setPassword] = useState(""); // Managed state for password
+  const [step, setStep] = useState(1); // 1: Credentials, 2: OTP
+  const [otp, setOtp] = useState("");
 
-  // Fetch locations and users on load
   useEffect(() => {
     fetch(`${API_URL}?action=getLoginData`)
       .then(res => res.json())
-      .then(data => {
-        setSetupData(data);
-      });
+      .then(data => setSetupData(data));
   }, []);
 
-  const handleLogin = async (e) => {
+  // STEP 1: Validate Password and Send OTP
+  const handleRequestOTP = async (e) => {
     e.preventDefault();
-    const p = e.target.password.value;
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}?action=login&user=${selectedUser}&pass=${p}&loc=${selectedLoc}`);
+      // 1. Verify Password First
+      const res = await fetch(`${API_URL}?action=login&user=${selectedUser}&pass=${password}&loc=${selectedLoc}`);
       const data = await res.json();
 
       if (data.authenticated) {
-        setUser(data.user);
-        sessionStorage.setItem('user', JSON.stringify(data.user));
-        if(data.user.role === 'Admin') navigate('/admin');
-        else navigate(data.user.role === 'Warehouse' ? '/warehouse' : '/clinic');
+        // 2. Password correct, now trigger OTP
+        const userObj = setupData.users.find(u => u.username === selectedUser);
+        const otpRes = await fetch(`${API_URL}?action=sendOTP&email=${userObj.email}`);
+        const otpData = await otpRes.json();
+
+        if (otpData.success) {
+          setStep(2); // Move to OTP entry
+        } else {
+          alert("Failed to send security code. Check user email setup.");
+        }
       } else {
         alert("Login failed: Invalid Password");
       }
@@ -53,67 +60,115 @@ const Login = ({ setUser }) => {
     }
   };
 
+  // STEP 2: Verify OTP and Log In
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const userObj = setupData.users.find(u => u.username === selectedUser);
+
+    try {
+      const res = await fetch(`${API_URL}?action=verifyOTP&email=${userObj.email}&otp=${otp}`);
+      const data = await res.json();
+
+      if (data.success) {
+        // Final Success
+        setUser(userObj);
+        localStorage.setItem('user', JSON.stringify(userObj));
+        if(userObj.role === 'Admin') navigate('/admin');
+        else navigate(userObj.role === 'Warehouse' ? '/warehouse' : '/clinic');
+      } else {
+        alert("Invalid or expired Security Code");
+      }
+    } catch (err) {
+      alert("Verification error.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-500 via-indigo-600 to-purple-700 p-6">
       <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
-        <form onSubmit={handleLogin} className="w-full max-w-md bg-white/10 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
-          <div className="flex justify-center mb-6">
-          <img src="/logo_PKPDKK.png" alt="PKPDKK Logo" className="h-20 w-auto object-contain" />
-          </div>
-          <h1 className="text-xl font-bold mb-6 text-center text-slate-800">Sistem Inventori PKPDKK</h1>
         
-          <div className="space-y-4">
+        <div className="flex justify-center mb-6">
+          <img src="/logo_PKPDKK.png" alt="PKPDKK Logo" className="h-20 w-auto object-contain" />
+        </div>
+        <h1 className="text-xl font-bold mb-6 text-center text-slate-800">Sistem Inventori PKPDKK</h1>
+
+        {step === 1 ? (
+          /* STEP 1 FORM */
+          <form onSubmit={handleRequestOTP} className="space-y-4">
             <div>
               <label className="text-[10px] font-bold text-slate-800 uppercase ml-1">Location</label>
-              <select className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none focus:bg-white/40 transition mb-4 cursor-pointer appearance-none shadow-lg"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 1rem center',
-                  backgroundSize: '1.5em'
-                }}
+              <select 
+                className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none appearance-none shadow-lg"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.5em' }}
                 value={selectedLoc}
                 onChange={(e) => { setSelectedLoc(e.target.value); setSelectedUser(""); }}
                 required
               >
-              <option value="" className="text-slate-900">Select Location...</option>
-              {setupData.locations.map(l => (
-              <option key={l} value={l} className="text-slate-900">
-              {l}
-              </option>
+                <option value="" className="text-slate-900">Select Location...</option>
+                {setupData.locations.map(l => <option key={l} value={l} className="text-slate-900">{l}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-800 uppercase ml-1">User</label>
+              <select 
+                className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none appearance-none shadow-lg disabled:opacity-50"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1.5em' }}
+                value={selectedUser}
+                onChange={(e) => setSelectedUser(e.target.value)}
+                disabled={!selectedLoc}
+                required
+              >
+                <option value="" className='text-slate-900'>Select Staff...</option>
+                {setupData.users.filter(u => u.location === selectedLoc).map(u => (
+                  <option key={u.username} value={u.username} className="text-slate-900">{u.username}</option>
                 ))}
-            </select>
-          </div>
+              </select>
+            </div>
 
-          <div>
-            <label className="text-[10px] font-bold text-slate-800 uppercase ml-1">User</label>
-            <select 
-              className="w-full p-4 bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl text-white outline-none focus:bg-white/40 transition mb-4 cursor-pointer appearance-none shadow-lg"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 1rem center',
-                  backgroundSize: '1.5em'
-                }}
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              disabled={!selectedLoc}
-              required
-            >
-              <option value="" className='text-slate-900'>Select Staff...</option>
-              {setupData.users.filter(u => u.location === selectedLoc).map(u => (
-                <option key={u.username} value={u.username} className="text-slate-900">{u.username} ({u.role})</option>
-              ))}
-            </select>
-          </div>
+            <input 
+              type="password" 
+              placeholder="Password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-4 bg-white/20 border border-white/30 rounded-2xl placeholder:text-white/70 text-white outline-none mb-4" 
+              required 
+            />
+            
+            <button type="submit" disabled={loading || !selectedUser} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-lg">
+              {loading ? "Processing..." : "Get Security Code"}
+            </button>
+          </form>
+        ) : (
+          /* STEP 2 FORM: OTP */
+          <form onSubmit={handleVerifyOTP} className="space-y-6 animate-in fade-in zoom-in duration-300">
+            <div className="text-center">
+              <p className="text-sm text-slate-100">Verification code sent to email associated with <b>{selectedUser}</b></p>
+            </div>
+            
+            <input 
+              type="text" 
+              maxLength="6"
+              placeholder="000000"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="w-full p-5 bg-white/20 border border-white/30 rounded-2xl text-white text-center text-3xl font-black tracking-[0.5em] outline-none"
+              required 
+              autoFocus
+            />
 
-          <input name="password" type="password" placeholder="Password" className="w-full p-4 bg-white/20 border border-white/30 rounded-2xl placeholder:text-white/70 text-white outline-none focus:bg-white/30 transition mb-4" required disabled={loading} />
-          
-          <button type="submit" disabled={loading || !selectedUser} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center justify-center gap-2">
-            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Sign In"}
-          </button>
-        </div>
-      </form>
+            <button type="submit" disabled={loading} className="w-full bg-green-600 text-white py-4 rounded-2xl font-bold hover:bg-green-700 transition shadow-lg">
+              {loading ? "Verifying..." : "Confirm & Login"}
+            </button>
+
+            <button type="button" onClick={() => setStep(1)} className="w-full text-white/60 text-xs font-bold uppercase tracking-widest hover:text-white">
+              ← Back to login
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -560,7 +615,7 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-r from-blue-900 to-indigo-400 flex flex-col font-sans">
+    <div className="min-h-screen bg-linear-to-r from-orange-400 via-pink-500 to-purple-600 flex flex-col font-sans">
       <header className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-2">
           {view !== 'menu' && (
@@ -573,10 +628,12 @@ const ClinicDashboard = ({ user, logout }) => {
             <span className="font-bold text-sm truncate uppercase tracking-tight text-slate-800">
               {user?.name?.replace(/_/g, ' ')}
             </span>
-            <span className="text-[10px] font-bold text-blue-600 truncate bg-blue-50 px-1.5 rounded w-fit">
+            <span className="inline-flex items-center text-[10px] font-bold text-blue-600 truncate bg-blue-50 px-1.5 rounded w-fit">
+              <MapPin size={12} className="mr-1" aria-hidden="true" />
               {user?.location?.replace(/_/g, ' ')}
             </span>
           </div>
+
         </div>
         <button onClick={logout} className="text-slate-400 p-2"><LogOut size={20}/></button>
       </header>
@@ -1130,28 +1187,71 @@ const ClinicDashboard = ({ user, logout }) => {
                 </span>
               </button>
 
-              {isExpanded &&
-                grouped[month].map((item) =>
-                  histTab === 'in' ? (
-                    <div
-                      key={`${item.TransactionID}-${item.CreatedAt}`}
-                      onClick={() => setSelectedTxn(item)}
-                      className="p-4 bg-white border rounded-xl cursor-pointer text-slate-800">
-                      <b className="text-slate-700">{item.TransactionID}</b>
-                      <p className="text-xs text-slate-400">
-                        {new Date(item.CreatedAt).toLocaleDateString()}
-                      </p>
-                    </div>
+              {isExpanded && (
+  <div className="space-y-3 mt-2">
+    {(() => {
+      // 1. If we are looking at INCOMING, show the simple ID cards
+      if (histTab === 'in') {
+        return grouped[month].map((item) => (
+          <div
+            key={`${item.TransactionID}-${item.CreatedAt}`}
+            onClick={() => setSelectedTxn(item)}
+            className="p-4 bg-white border rounded-2xl cursor-pointer hover:border-blue-300 transition shadow-sm"
+          >
+            <div className="flex justify-between items-center">
+              <b className="text-slate-700">{item.TransactionID}</b>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                {item.Status}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              {new Date(item.CreatedAt).toLocaleDateString()} • From: {item.From}
+            </p>
+          </div>
+        ));
+      } 
 
-                  ) : (
-                    <div
-                      key={`${item.Item_Name}-${item.Timestamp}`}
-                      className="p-4 bg-white border rounded-xl"
-                    >
-                      <b className="text-slate-700">{item.Item_Name}</b>
-                    </div>
-                  )
-                )}
+      // 2. If we are looking at USAGE, group items by TIMESTAMP
+      else {
+        // This magic block groups items that share the same timestamp
+        const usageByTimestamp = grouped[month].reduce((acc, item) => {
+          const timeKey = item.Timestamp; 
+          if (!acc[timeKey]) acc[timeKey] = [];
+          acc[timeKey].push(item);
+          return acc;
+        }, {});
+
+        // Now we turn that group into the UI cards
+        return Object.entries(usageByTimestamp)
+          .sort((a, b) => new Date(b[0]) - new Date(a[0])) // Newest time first
+          .map(([timestamp, items], tIdx) => (
+            <div key={tIdx} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+              {/* Header of the Card: Time and User */}
+              <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-2">
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight">
+                  {items[0].User || 'Staff'}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              {/* List of all items used at this exact time */}
+              <div className="space-y-1">
+                {items.map((item, iIdx) => (
+                  <div key={iIdx} className="flex justify-between text-xs">
+                    <span className="text-slate-600">{item.Item_Name}</span>
+                    <span className="font-bold text-slate-800">x{item.Qty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+      }
+    })()}
+  </div>
+)}
+
             </div>
           );
         });
@@ -1198,8 +1298,8 @@ const ClinicDashboard = ({ user, logout }) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState(() => JSON.parse(sessionStorage.getItem('user')));
-  const logout = () => { setUser(null); sessionStorage.removeItem('user'); window.location.href="/"; };
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));
+  const logout = () => { setUser(null); localStorage.removeItem('user'); window.location.href="/"; };
 
   return (
     <Router>
