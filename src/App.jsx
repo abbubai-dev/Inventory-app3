@@ -659,14 +659,24 @@ const ClinicDashboard = ({ user, logout }) => {
     
     {/* Welcome & Stats Header */}
     <div className="bg-linear-to-r from-blue-600 to-indigo-700 p-6 rounded-4xl text-white shadow-lg shadow-blue-200">
-      <h2 className="text-xl font-bold">Hello, {user.name}</h2>
+      <h2 className="text-xl font-bold">Hello, {(user?.name || user?.username || "Staff").replace(/_/g, ' ')}</h2>
       <p className="opacity-80 text-xs">Manage inventory for {user.location}</p>
       
       <div className="flex gap-4 mt-4">
-        <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
+        {/* Low Stock Card - Now Clickable */}
+        <div 
+          onClick={() => setShowLowStockModal(true)}
+          className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm cursor-pointer active:scale-95 transition hover:bg-white/30 border border-white/10"
+          >
           <p className="text-[10px] uppercase font-bold opacity-70">Low Stock</p>
-          <p className="text-xl font-black">{inventory.filter(i => (Number(i[locKey]) || 0) <= (i.MinStock || 0)).length}</p>
+          <p className="text-xl font-black flex items-center justify-center gap-1">
+            {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length}
+            {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length > 0 && 
+              <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
+            }
+          </p>
         </div>
+
         <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
           <p className="text-[10px] uppercase font-bold opacity-70">Today's Usage</p>
           <p className="text-xl font-black">{history.usage?.filter(u => new Date(u.Timestamp).toDateString() === new Date().toDateString()).length || 0}</p>
@@ -1296,6 +1306,46 @@ const ClinicDashboard = ({ user, logout }) => {
         </div>
       </div>
     )}
+
+    {/* --- LOW STOCK ALERT MODAL --- */}
+{showLowStockModal && (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2 text-red-600">
+          <AlertTriangle size={20} />
+          <h3 className="font-bold text-lg">Stock Alerts</h3>
+        </div>
+        <button onClick={() => setShowLowStockModal(false)} className="p-2 bg-slate-100 rounded-full text-slate-400">✕</button>
+      </div>
+
+      <div className="max-h-64 overflow-y-auto space-y-2 mb-6 pr-1">
+        {inventory
+          .filter(item => (Number(item[locKey]) || 0) < (item.MinStock || 0))
+          .sort((a, b) => (Number(a[locKey]) || 0) - (Number(b[locKey]) || 0))
+          .map((item, idx) => (
+            <div key={idx} className="flex justify-between items-center p-3 bg-red-50 rounded-xl border border-red-100">
+              <div>
+                <p className="text-xs font-bold text-slate-800">{item.Item_Name}</p>
+                <p className="text-[10px] text-red-500 font-medium">Min: {item.MinStock} units required</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-black text-red-600">{item[locKey] || 0}</p>
+                <p className="text-[9px] text-slate-400 uppercase font-bold">In Stock</p>
+              </div>
+            </div>
+          ))}
+      </div>
+
+      <button 
+        onClick={() => { setShowLowStockModal(false); setView('restock'); }}
+        className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition flex items-center justify-center gap-2"
+      >
+        <Plus size={16} /> Request Restock
+      </button>
+    </div>
+  </div>
+  )}
   </div>
 )}
 
