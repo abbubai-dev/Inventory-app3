@@ -73,11 +73,18 @@ const Login = ({ setUser }) => {
       const data = await res.json();
 
       if (data.success) {
-        // Final Success
-        setUser(userObj);
-        localStorage.setItem('user', JSON.stringify(userObj));
-        if(userObj.role === 'Admin') navigate('/admin');
-        else navigate(userObj.role === 'Warehouse' ? '/warehouse' : '/clinic');
+        // 1. Create a "Full User" object that has both 'username' and 'name'
+        const fullUser = { 
+          ...userObj, 
+          name: userObj.username 
+        };
+
+        // 2. Use this 'fullUser' object instead of 'userObj'
+        setUser(fullUser);
+        localStorage.setItem('user', JSON.stringify(fullUser));
+        
+        if(fullUser.role === 'Admin') navigate('/admin');
+        else navigate(fullUser.role === 'Warehouse' ? '/warehouse' : '/clinic');
       } else {
         alert("Invalid or expired Security Code");
       }
@@ -628,7 +635,7 @@ const ClinicDashboard = ({ user, logout }) => {
           <img src="/logo_PKPDKK.png" alt="Logo" className="h-6 w-auto" />
           <div className="flex flex-col">
             <span className="font-bold text-sm truncate uppercase tracking-tight text-slate-800">
-              {user?.name?.replace(/_/g, ' ')}
+              {(user?.name || user?.username || "Staff").replace(/_/g, ' ')}
             </span>
             <span className="inline-flex items-center text-[10px] font-bold text-blue-600 truncate bg-blue-50 px-1.5 rounded w-fit">
               <MapPin size={12} className="mr-1" aria-hidden="true" />
