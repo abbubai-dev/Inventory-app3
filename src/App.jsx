@@ -115,7 +115,7 @@ const Login = ({ setUser }) => {
                 value={selectedLoc}
                 onChange={(e) => { setSelectedLoc(e.target.value); setSelectedUser(""); }}
                 required
-              >
+                >
                 <option value="" className="text-slate-900">Select Location...</option>
                 {setupData.locations.map(l => <option key={l} value={l} className="text-slate-900">{l}</option>)}
               </select>
@@ -130,7 +130,7 @@ const Login = ({ setUser }) => {
                 onChange={(e) => setSelectedUser(e.target.value)}
                 disabled={!selectedLoc}
                 required
-              >
+                >
                 <option value="" className='text-slate-900'>Select Staff...</option>
                 {setupData.users.filter(u => u.location === selectedLoc).map(u => (
                   <option key={u.username} value={u.username} className="text-slate-900">{u.username}</option>
@@ -230,7 +230,7 @@ const WarehouseDashboard = ({ user, logout }) => {
             <button 
                 onClick={() => setShowAlerts(!showAlerts)} 
                 className={`relative p-2 rounded-full transition ${showAlerts ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}
-            >
+              >
                 <AlertTriangle size={20}/>
                 {clinicAlerts.length > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
             </button>
@@ -430,6 +430,7 @@ const ClinicDashboard = ({ user, logout }) => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [showLowStockModal, setShowLowStockModal] = useState(false);
 
   const locKey = user.location;
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
@@ -655,76 +656,76 @@ const ClinicDashboard = ({ user, logout }) => {
         )}
 
         {view === 'menu' && (
-  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
     
-    {/* Welcome & Stats Header */}
-    <div className="bg-linear-to-r from-blue-600 to-indigo-700 p-6 rounded-4xl text-white shadow-lg shadow-blue-200">
-      <h2 className="text-xl font-bold">Hello, {(user?.name || user?.username || "Staff").replace(/_/g, ' ')}</h2>
-      <p className="opacity-80 text-xs">Manage inventory for {user.location}</p>
+          {/* Welcome & Stats Header */}
+          <div className="bg-linear-to-r from-blue-600 to-indigo-700 p-6 rounded-4xl text-white shadow-lg shadow-blue-200">
+            <h2 className="text-xl font-bold">Hello, {(user?.name || user?.username || "Staff").replace(/_/g, ' ')}</h2>
+            <p className="opacity-80 text-xs">Manage inventory for {user.location}</p>
       
-      <div className="flex gap-4 mt-4">
-        {/* Low Stock Card - Now Clickable */}
-        <div 
-          onClick={() => setShowLowStockModal(true)}
-          className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm cursor-pointer active:scale-95 transition hover:bg-white/30 border border-white/10"
-          >
-          <p className="text-[10px] uppercase font-bold opacity-70">Low Stock</p>
-          <p className="text-xl font-black flex items-center justify-center gap-1">
-            {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length}
-            {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length > 0 && 
-              <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
-            }
-          </p>
-        </div>
+            <div className="flex gap-4 mt-4">
+              {/* Low Stock Card - Now Clickable */}
+              <div 
+                onClick={() => setShowLowStockModal(true)}
+                className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm cursor-pointer active:scale-95 transition hover:bg-white/30 border border-white/10"
+                >
+                <p className="text-[10px] uppercase font-bold opacity-70">Low Stock</p>
+                <p className="text-xl font-black flex items-center justify-center gap-1">
+                  {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length}
+                  {inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).length > 0 && 
+                    <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></span>
+                  }
+                </p>
+              </div>
 
-        <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
-          <p className="text-[10px] uppercase font-bold opacity-70">Today's Usage</p>
-          <p className="text-xl font-black">{history.usage?.filter(u => new Date(u.Timestamp).toDateString() === new Date().toDateString()).length || 0}</p>
-        </div>
-      </div>
-    </div>
+              <div className="bg-white/20 p-3 rounded-2xl flex-1 text-center backdrop-blur-sm">
+                <p className="text-[10px] uppercase font-bold opacity-70">Today's Usage</p>
+                <p className="text-xl font-black">{history.usage?.filter(u => new Date(u.Timestamp).toDateString() === new Date().toDateString()).length || 0}</p>
+              </div>
+            </div>
+          </div>
 
-    {/* Primary Actions Grid */}
-    <div className="grid grid-cols-1 gap-4">
-      <button onClick={() => setView('usage')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
-        <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-          <Minus size={24} strokeWidth={2.5}/>
-        </div>
-        <div className="text-left">
-          <h2 className="font-bold text-slate-800">Record Usage</h2>
-          <p className="text-xs text-slate-400">Deduct items from your shelf</p>
-        </div>
-      </button>
+          {/* Primary Actions Grid */}
+          <div className="grid grid-cols-1 gap-4">
+            <button onClick={() => setView('usage')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
+              <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <Minus size={24} strokeWidth={2.5}/>
+              </div>
+              <div className="text-left">
+                <h2 className="font-bold text-slate-800">Record Usage</h2>
+                <p className="text-xs text-slate-400">Deduct items from your shelf</p>
+              </div>
+            </button>
 
-      <button onClick={() => setView('transfer_out')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
-        <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
-          <ArrowUpFromLine size={24} strokeWidth={2.5}/>
-        </div>
-        <div className="text-left">
-          <h2 className="font-bold text-slate-800">Transfer Out</h2>
-          <p className="text-xs text-slate-400">Send stock to another clinic</p>
-        </div>
-      </button>
-    </div>
+            <button onClick={() => setView('transfer_out')} className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.98]">
+              <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                <ArrowUpFromLine size={24} strokeWidth={2.5}/>
+              </div>
+              <div className="text-left">
+                <h2 className="font-bold text-slate-800">Transfer Out</h2>
+                <p className="text-xs text-slate-400">Send stock to another clinic</p>
+              </div>
+            </button>
+          </div>
 
-    {/* Secondary Actions Row */}
-    <div className="grid grid-cols-2 gap-4">
-      <button onClick={() => setView('scanner')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
-        <QrCode size={24} className="text-green-600" />
-        <span className="text-xs font-bold text-slate-700">Receive</span>
-      </button>
-      <button onClick={() => setView('history')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
-        <History size={24} className="text-purple-600" />
-        <span className="text-xs font-bold text-slate-700">History</span>
-      </button>
-    </div>
+          {/* Secondary Actions Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <button onClick={() => setView('scanner')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
+              <QrCode size={24} className="text-green-600" />
+              <span className="text-xs font-bold text-slate-700">Receive</span>
+            </button>
+            <button onClick={() => setView('history')} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 transition-all hover:bg-slate-50">
+              <History size={24} className="text-purple-600" />
+              <span className="text-xs font-bold text-slate-700">History</span>
+            </button>
+          </div>
 
-    {/* Footer Action */}
-    <button onClick={() => setView('stock')} className="w-full p-4 bg-slate-100 rounded-2xl text-slate-500 text-xs font-bold flex items-center justify-center gap-2 border border-dashed border-slate-300">
-      <Package size={16} /> View Full Inventory List
-    </button>
-  </div>
-)}
+          {/* Footer Action */}
+          <button onClick={() => setView('stock')} className="w-full p-4 bg-slate-100 rounded-2xl text-slate-500 text-xs font-bold flex items-center justify-center gap-2 border border-dashed border-slate-300">
+            <Package size={16} /> View Full Inventory List
+          </button>
+        </div>
+        )}
 
         {/* --- LIST VIEWS WITH SKELETONS --- */}
         {view !== 'menu' && view !== 'scanner' && view !== 'usage_cart' && loading ? (
@@ -809,9 +810,9 @@ const ClinicDashboard = ({ user, logout }) => {
 
           {/* --- TRANSFER OUT VIEW --- */}
           {view === 'transfer_out' && (
-          <div className="space-y-4">
-            {!txnId ? (
-              <>
+            <div className="space-y-4">
+              {!txnId ? (
+                <>
                 <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Destination Clinic</label>
                   <select 
@@ -843,239 +844,242 @@ const ClinicDashboard = ({ user, logout }) => {
                   </button>
                 </div>
 
-      {inventory
-        .filter(i => {
-          const term = searchTerm.toLowerCase();
-          return (
-            i.Item_Name?.toLowerCase().includes(term) ||
-            i.Category?.toLowerCase().includes(term) ||
-            i.Code?.toString().includes(term)
-          );
-        })
-        .map(i => (
-          <div 
-            key={i.Code} 
-            className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
-            <div>
-              <p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p>
-              <h3 className="text-sm font-bold">{i.Item_Name}</h3>
-              <p className="text-xs text-slate-500">Category: {i.Category}</p>
-              <p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p>
+                {inventory
+                .filter(i => {
+                  const term = searchTerm.toLowerCase();
+                  return (
+                    i.Item_Name?.toLowerCase().includes(term) ||
+                    i.Category?.toLowerCase().includes(term) ||
+                    i.Code?.toString().includes(term)
+                    );
+                  })
+                .map(i => (
+                  <div 
+                    key={i.Code} 
+                    className="bg-white p-4 rounded-xl border flex justify-between items-center shadow-sm">
+                    <div>
+                      <p className="text-[9px] text-slate-400 font-mono font-bold">#{i.Code}</p>
+                      <h3 className="text-sm font-bold">{i.Item_Name}</h3>
+                      <p className="text-xs text-slate-500">Category: {i.Category}</p>
+                      <p className="text-xs text-blue-500">Available: {i[locKey] || 0}</p>
+                    </div>
+                    <button onClick={() => { 
+                      const q = prompt(`How many ${i.Item_Name} to send?`); 
+                      if(q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]); 
+                      }} className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                      <Plus size={20}/>
+                    </button>
+                  </div>
+                  ))
+                }
+                </>
+                ) : (
+                <div className="bg-white p-8 rounded-3xl border shadow-xl text-center space-y-4">
+                  <h3 className="font-bold text-lg">Transfer Ready</h3>
+                  <QRCodeCanvas value={txnId} size={200} className="mx-auto p-2 border rounded-xl" />
+                  <p className="font-mono font-bold text-blue-600">{txnId}</p>
+                  <p className="text-xs text-slate-400">Ask the receiving clinic to scan this code.</p>
+                  <button onClick={() => setView('menu')} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold">Done</button>
+                </div>
+                )
+              }
             </div>
-            <button onClick={() => { 
-              const q = prompt(`How many ${i.Item_Name} to send?`); 
-              if(q) setCart([...cart, { name: i.Item_Name, code: i.Code, qty: q }]); 
-              }} className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-              <Plus size={20}/>
-            </button>
-          </div>
-        ))
-      }
-      </>
-            ) : (
-              <div className="bg-white p-8 rounded-3xl border shadow-xl text-center space-y-4">
-                <h3 className="font-bold text-lg">Transfer Ready</h3>
-                <QRCodeCanvas value={txnId} size={200} className="mx-auto p-2 border rounded-xl" />
-                <p className="font-mono font-bold text-blue-600">{txnId}</p>
-                <p className="text-xs text-slate-400">Ask the receiving clinic to scan this code.</p>
-                <button onClick={() => setView('menu')} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold">Done</button>
+            )
+          }
+
+          {/* --- TRANSFER CART REVIEW --- */}
+          {view === 'transfer_cart' && (
+            <div className="space-y-4">
+              <h2 className="font-bold text-lg">Transfer to {targetLoc}</h2>
+              <div className="space-y-2">
+                {cart.map((c, idx) => <div key={idx} className="p-3 bg-white border rounded-xl flex justify-between text-sm"><span>{c.name}</span><div className="flex items-center gap-3"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500">×</button></div></div>)}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* --- TRANSFER CART REVIEW --- */}
-        {view === 'transfer_cart' && (
-          <div className="space-y-4">
-            <h2 className="font-bold text-lg">Transfer to {targetLoc}</h2>
-            <div className="space-y-2">
-              {cart.map((c, idx) => <div key={idx} className="p-3 bg-white border rounded-xl flex justify-between text-sm"><span>{c.name}</span><div className="flex items-center gap-3"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-500">×</button></div></div>)}
+              <button onClick={handleClinicTransfer} disabled={actionLoading || cart.length === 0} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                {actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Confirm & Send Stock"}
+              </button>
             </div>
-            <button onClick={handleClinicTransfer} disabled={actionLoading || cart.length === 0} className="w-full bg-orange-600 text-white py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
-              {actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Confirm & Send Stock"}
-            </button>
-          </div>
-        )}
+            )
+          }
 
-            {view === 'stock' && (
-        <div className="space-y-2">
-        <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
-        {inventory
-        .filter(i => {
-        const term = searchTerm.toLowerCase();
-        return (
-          i.Item_Name?.toLowerCase().includes(term) ||
-          i.Category?.toLowerCase().includes(term) ||
-          i.Code?.toString().includes(term)
-          );
-        })
-        .map(i => (
-        <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
-          <div>
-            <p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p>
-            <span className="text-sm font-bold text-slate-700">{i.Item_Name}</span>
-            <p className="text-xs text-slate-500">Category: {i.Category}</p>
-          </div>
-          <span className={`font-bold px-3 py-1 rounded-lg ${
-              Number(i[locKey]) < i.MinStock
-                ? 'bg-red-100 text-red-600'
-                : 'bg-slate-100 text-slate-600'
-            }`} >
-            {i[locKey] || 0}
-          </span>
-          </div>
-        ))}
-      </div>
-      )}
+          {view === 'stock' && (
+            <div className="space-y-2">
+              <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+              {inventory
+                .filter(i => {
+                  const term = searchTerm.toLowerCase();
+                  return (
+                    i.Item_Name?.toLowerCase().includes(term) ||
+                    i.Category?.toLowerCase().includes(term) ||
+                    i.Code?.toString().includes(term)
+                  );
+                })
+                
+                .map(i => (
+                  <div key={i.Code} className="p-4 bg-white border rounded-xl flex justify-between items-center shadow-sm">
+                    <div>
+                      <p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p>
+                      <span className="text-sm font-bold text-slate-700">{i.Item_Name}</span>
+                      <p className="text-xs text-slate-500">Category: {i.Category}</p>
+                    </div>
+                    <span className={`font-bold px-3 py-1 rounded-lg ${
+                      Number(i[locKey]) < i.MinStock
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-slate-100 text-slate-600'
+                      }`} >
+                      {i[locKey] || 0}
+                    </span>
+                  </div>
+              ))}
+            </div>
+          )}
 
-        {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
+          {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
             <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
               <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
               <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
             </div>
           ))}
 
-    {view === 'history' && (
-  <div className="space-y-4">
+          {view === 'history' && (
+            <div className="space-y-4">
 
-    {/* ---------- HELPERS ---------- */}
-    {/*
-      Timezone-safe date formatter
-      Returns YYYY-MM-DD
-    */}
-    {(() => {})()}
+            {/* ---------- HELPERS ---------- */}
+            {/*
+                Timezone-safe date formatter
+                  Returns YYYY-MM-DD
+            */}
+            {(() => {})()}
     
-    {/* Tab Switcher */}
-    <div className="flex bg-slate-200 p-1 rounded-xl">
-      <button
-        onClick={() => setHistTab('in')}
-        className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-          histTab === 'in'
-            ? 'bg-white shadow text-blue-600'
-            : 'text-slate-500'
-        }`}
-      >
-        Incoming
-      </button>
-      <button
-        onClick={() => setHistTab('out')}
-        className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-          histTab === 'out'
-            ? 'bg-white shadow text-blue-600'
-            : 'text-slate-500'
-        }`}
-      >
-        Usage
-      </button>
-    </div>
+            {/* Tab Switcher */}
+              <div className="flex bg-slate-200 p-1 rounded-xl">
+                <button
+                  onClick={() => setHistTab('in')}
+                 className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+                  histTab === 'in'
+                  ? 'bg-white shadow text-blue-600'
+                  : 'text-slate-500'
+                  }`}
+                  >
+                  Incoming
+                </button>
+                <button
+                  onClick={() => setHistTab('out')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+                  histTab === 'out'
+                  ? 'bg-white shadow text-blue-600'
+                  : 'text-slate-500'
+                  }`}
+                  >
+                  Usage
+                </button>
+              </div>
 
-    {/* ---------- DATE FILTER & PDF ---------- */}
-    <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
-      <div className="flex justify-between items-center">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-          Filter & Export
-        </h3>
-        {(startDate || endDate) && (
-          <button
-            onClick={() => {
-              setStartDate('');
-              setEndDate('');
-            }}
-            className="text-[10px] text-red-500 font-bold"
-          >
-            Reset
-          </button>
-        )}
-      </div>
+              {/* ---------- DATE FILTER & PDF ---------- */}
+              <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Filter & Export
+                  </h3>
+                  {(startDate || endDate) && (
+                    <button
+                      onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                      }}
+                      className="text-[10px] text-red-500 font-bold">
+                      Reset
+                    </button>
+                  )}
+                </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-          />
-        </div>
-        <div>
-          <p className="text-[9px] text-slate-400 ml-1">End Date</p>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-          />
-        </div>
-      </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-slate-400 ml-1">End Date</p>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+                    />
+                  </div>
+                </div>
 
-      {/* ---------- PDF EXPORT ---------- */}
-      <button
-        onClick={() => {
-          const toLocalDate = (date) =>
-            new Date(date).toLocaleDateString('en-CA');
+                {/* ---------- PDF EXPORT ---------- */}
+                <button
+                  onClick={() => {
+                    const toLocalDate = (date) =>
+                    new Date(date).toLocaleDateString('en-CA');
 
-          const doc = new jsPDF();
-          const title =
-            histTab === 'in'
-              ? 'Incoming Stock Report'
-              : 'Clinic Usage Report';
+                    const doc = new jsPDF();
+                    const title =
+                    histTab === 'in'
+                    ? 'Incoming Stock Report'
+                    : 'Clinic Usage Report';
 
-          const rawData =
-            histTab === 'in'
-              ? history.transfers || []
-              : history.usage || [];
+                    const rawData =
+                    histTab === 'in'
+                    ? history.transfers || []
+                    : history.usage || [];
 
-          const dataToExport = rawData.filter((item) => {
-            const d = toLocalDate(item.CreatedAt || item.Timestamp);
-            return (!startDate || d >= startDate) &&
-                   (!endDate || d <= endDate);
-          });
+                    const dataToExport = rawData.filter((item) => {
+                      const d = toLocalDate(item.CreatedAt || item.Timestamp);
+                      return (!startDate || d >= startDate) &&
+                      (!endDate || d <= endDate);
+                    });
 
-          if (!dataToExport.length) {
-            alert('No data to export for selected range.');
-            return;
-          }
+                    if (!dataToExport.length) {
+                      alert('No data to export for selected range.');
+                      return;
+                    }
 
-          doc.setFontSize(18);
-          doc.text(title, 14, 20);
-          doc.setFontSize(10);
-          doc.setTextColor(100);
-          doc.text(
-            `Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`,
-            14,
-            28
-          );
-          doc.text(`Generated by: ${user.name}`, 14, 33);
+                    doc.setFontSize(18);
+                    doc.text(title, 14, 20);
+                    doc.setFontSize(10);
+                    doc.setTextColor(100);
+                    doc.text(
+                      `Location: ${user.location} | Period: ${startDate || 'Start'} to ${endDate || 'End'}`,
+                      14,
+                      28
+                    );
+                    doc.text(`Generated by: ${user.name}`, 14, 33);
 
-          const tableHeaders =
-            histTab === 'in'
-              ? [['Date', 'ID', 'From', 'Status']]
-              : [['Date', 'Item Name', 'Qty', 'User']];
+                    const tableHeaders =
+                    histTab === 'in'
+                    ? [['Date', 'ID', 'From', 'Status']]
+                    : [['Date', 'Item Name', 'Qty', 'User']];
 
-          const tableRows = dataToExport.map((item) =>
-            histTab === 'in'
-              ? [
-                  toLocalDate(item.CreatedAt),
-                  item.TransactionID,
-                  item.From,
-                  item.Status,
-                ]
-              : [
-                  toLocalDate(item.Timestamp),
-                  item.Item_Name,
-                  item.Qty,
-                  item.User || 'Staff',
-                ]
-          );
+                    const tableRows = dataToExport.map((item) =>
+                      histTab === 'in'
+                      ? [
+                      toLocalDate(item.CreatedAt),
+                      item.TransactionID,
+                      item.From,
+                      item.Status,
+                      ]
+                      : [
+                      toLocalDate(item.Timestamp),
+                      item.Item_Name,
+                      item.Qty,
+                      item.User || 'Staff',
+                      ]
+                    );
 
-          doc.autoTable({
-            head: tableHeaders,
-            body: tableRows,
-            startY: 40,
-            theme: 'striped',
-            headStyles: { fillColor: [51, 65, 85] },
-          });
+                    doc.autoTable({
+                      head: tableHeaders,
+                      body: tableRows,
+                      startY: 40,
+                      theme: 'striped',
+                      headStyles: { fillColor: [51, 65, 85] },
+                    });
 
           // ---------- SUMMARY PAGE ----------
           doc.addPage();
@@ -1207,75 +1211,76 @@ const ClinicDashboard = ({ user, logout }) => {
               </button>
 
               {isExpanded && (
-  <div className="space-y-3 mt-2">
-    {(() => {
-      // 1. If we are looking at INCOMING, show the simple ID cards
-      if (histTab === 'in') {
-        return grouped[month].map((item) => (
-          <div
-            key={`${item.TransactionID}-${item.CreatedAt}`}
-            onClick={() => setSelectedTxn(item)}
-            className="p-4 bg-white border rounded-2xl cursor-pointer hover:border-blue-300 transition shadow-sm"
-          >
-            <div className="flex justify-between items-center">
-              <b className="text-slate-700">{item.TransactionID}</b>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                {item.Status}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
-              {new Date(item.CreatedAt).toLocaleDateString()} • From: {item.From}
-            </p>
-          </div>
-        ));
-      } 
+                <div className="space-y-3 mt-2">
+                  {(() => {
+                  // 1. If we are looking at INCOMING, show the simple ID cards
+                  if (histTab === 'in') {
+                    return grouped[month].map((item) => (
+                    <div
+                      key={`${item.TransactionID}-${item.CreatedAt}`}
+                      onClick={() => setSelectedTxn(item)}
+                      className="p-4 bg-white border rounded-2xl cursor-pointer hover:border-blue-300 transition shadow-sm"
+                      >
+                      <div className="flex justify-between items-center">
+                        <b className="text-slate-700">{item.TransactionID}</b>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {item.Status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {new Date(item.CreatedAt).toLocaleDateString()} • From: {item.From}
+                      </p>
+                    </div>
+                    ));
+                    } 
 
-      // 2. If we are looking at USAGE, group items by TIMESTAMP
-      else {
-        // This magic block groups items that share the same timestamp
-        const usageByTimestamp = grouped[month].reduce((acc, item) => {
-          const timeKey = item.Timestamp; 
-          if (!acc[timeKey]) acc[timeKey] = [];
-          acc[timeKey].push(item);
-          return acc;
-        }, {});
+                    // 2. If we are looking at USAGE, group items by TIMESTAMP
+                    else {
+                    // This magic block groups items that share the same timestamp
+                    const usageByTimestamp = grouped[month].reduce((acc, item) => {
+                      const timeKey = item.Timestamp; 
+                      if (!acc[timeKey]) acc[timeKey] = [];
+                      acc[timeKey].push(item);
+                      return acc;
+                      },
+                     {});
 
-        // Now we turn that group into the UI cards
-        return Object.entries(usageByTimestamp)
-          .sort((a, b) => new Date(b[0]) - new Date(a[0])) // Newest time first
-          .map(([timestamp, items], tIdx) => (
-            <div key={tIdx} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-              {/* Header of the Card: Time and User */}
-              <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-2">
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight">
-                  {items[0].User || 'Staff'}
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+                      // Now we turn that group into the UI cards
+                      return Object.entries(usageByTimestamp)
+                      .sort((a, b) => new Date(b[0]) - new Date(a[0])) // Newest time first
+                      .map(([timestamp, items], tIdx) => (
+                       <div key={tIdx} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                        {/* Header of the Card: Time and User */}
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-2">
+                          <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight">
+                            {items[0].User || 'Staff'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
 
-              {/* List of all items used at this exact time */}
-              <div className="space-y-1">
-                {items.map((item, iIdx) => (
-                  <div key={iIdx} className="flex justify-between text-xs">
-                    <span className="text-slate-600">{item.Item_Name}</span>
-                    <span className="font-bold text-slate-800">x{item.Qty}</span>
+                        {/* List of all items used at this exact time */}
+                        <div className="space-y-1">
+                          {items.map((item, iIdx) => (
+                            <div key={iIdx} className="flex justify-between text-xs">
+                              <span className="text-slate-600">{item.Item_Name}</span>
+                              <span className="font-bold text-slate-800">x{item.Qty}</span>
+                            </div>
+                          ))}
+                        </div>
+                        </div>
+                        ));
+                      }
+                    })()}
                   </div>
-                ))}
-              </div>
-            </div>
-          ));
-      }
-    })()}
-  </div>
-)}
+                )}
 
-            </div>
-          );
-        });
-      })()}
-    </div>
+              </div>
+            );
+          });
+        })()}
+      </div>
 
     {/* ---------- MODAL ---------- */}
     {selectedTxn && (
