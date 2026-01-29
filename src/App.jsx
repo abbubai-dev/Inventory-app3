@@ -183,7 +183,7 @@ const Login = ({ setUser }) => {
   );
 };
 
-// ---WAREHOUSE DASHBOARD WITH CLINIC ALERTS ---
+// --- WAREHOUSE DASHBOARD (STOR) - CLEAN & COMPACT VERSION ---
 const WarehouseDashboard = ({ user, logout }) => {
   const [inventory, setInventory] = useState([]);
   const [cart, setCart] = useState([]);
@@ -193,15 +193,15 @@ const WarehouseDashboard = ({ user, logout }) => {
   const [targetLoc, setTargetLoc] = useState("KPH");
   const [showAlerts, setShowAlerts] = useState(false);
 
+  const clinics = ["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
+
   useEffect(() => { 
     fetch(`${API_URL}?action=getInventory`).then(res => res.json()).then(setInventory); 
   }, []);
 
-  // Filter items that are low in ANY clinic
-  const clinicAlerts = inventory.filter(item => {
-    const clinics = ["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
-    return clinics.some(c => (Number(item[c]) || 0) < (item.MinStock || 0));
-  });
+  const clinicAlerts = inventory.filter(item => 
+    clinics.some(c => (Number(item[c]) || 0) < (item.MinStock || 0))
+  );
 
   const addToCart = (item) => {
     const q = window.prompt(`Quantity for ${item.Item_Name}:`, "1");
@@ -219,97 +219,155 @@ const WarehouseDashboard = ({ user, logout }) => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-slate-100 font-sans">
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
+        <header className="bg-white border-b px-5 py-3 flex justify-between items-center shadow-sm z-10">
           <div className="flex items-center gap-3">
-            <img src="/logo_PKPDKK.png" alt="Logo" className="h-8 w-auto" />
-            <h1 className="text-xl font-bold">STOR PKPDKK</h1>
+            <img src="/logo_PKPDKK.png" alt="Logo" className="h-7 w-auto" />
+            <h1 className="text-sm font-black tracking-tight text-slate-700 uppercase">STOR PKPDKK</h1>
           </div>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-2">
             <button 
-                onClick={() => setShowAlerts(!showAlerts)} 
-                className={`relative p-2 rounded-full transition ${showAlerts ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}
-              >
-                <AlertTriangle size={20}/>
-                {clinicAlerts.length > 0 && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
+              onClick={() => setShowAlerts(!showAlerts)} 
+              className={`relative p-2 rounded-lg transition-colors ${showAlerts ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            >
+              <AlertTriangle size={16}/>
+              {clinicAlerts.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 border-2 border-white rounded-full"></span>}
             </button>
-            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500"><LogOut size={20}/></button>
+            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><LogOut size={16}/></button>
           </div>
         </header>
 
-        <div className="p-6 overflow-y-auto flex-1">
-          {showAlerts && (
-            <div className="mb-8 bg-red-50 border border-red-200 rounded-2xl p-4">
-              <h2 className="text-red-700 font-bold flex items-center gap-2 mb-4"><AlertTriangle size={18}/> Clinic Stock Alerts</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-4 overflow-y-auto flex-1 space-y-4">
+          {/* COMPACT ALERTS BOX */}
+          {showAlerts && clinicAlerts.length > 0 && (
+            <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-3">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1">
+                   <AlertTriangle size={12}/> Clinic Shortages
+                </span>
+                <button onClick={() => setShowAlerts(false)} className="text-slate-300 hover:text-slate-500">×</button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                 {clinicAlerts.map(item => (
-                   <div key={item.Code} className="bg-white p-3 rounded-xl border border-red-100 shadow-sm flex justify-between items-center">
-                      <div>
-                        <p className="font-bold text-xs">{item.Item_Name}</p>
-                        <p className="text-[10px] text-slate-400">Critical at: {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].filter(c => (Number(item[c])||0) < item.MinStock).join(", ")}</p>
-                      </div>
-                      <button onClick={() => { setTargetLoc("KPH"); addToCart(item); }} className="p-1 px-3 bg-red-600 text-white text-[10px] font-bold rounded-lg">Fulfill</button>
+                   <div key={item.Code} className="min-w-45 bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-between">
+                      <p className="text-[10px] font-bold text-slate-700 truncate mb-1">{item.Item_Name}</p>
+                      <button 
+                        onClick={() => { setTargetLoc(clinics.find(c => (Number(item[c])||0) < item.MinStock)); addToCart(item); }} 
+                        className="w-full py-1 bg-red-600 text-white text-[9px] font-bold rounded uppercase tracking-tighter"
+                      >Fulfill</button>
                    </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="relative mb-6">
-            <Search className="absolute left-3 top-3 text-slate-400" size={20} />
-            <input placeholder="Search Category, Items, ID..." className="w-full pl-10 pr-4 py-3 rounded-xl border outline-none shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
+          {/* COMPACT SEARCH */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input 
+              placeholder="Search category or item..." 
+              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border-none ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 shadow-sm"
+              onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
+            />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {inventory.filter(i => i.Item_Name?.toLowerCase().includes(searchTerm) || i.Category?.toLowerCase().includes(searchTerm) || i.Code?.toString().toLowerCase().includes(searchTerm)).map(item => {
-              const stock = Number(item[user.location]) || 0;
-              const low = stock < item.MinStock && stock > 0;
-              return (
-                <div key={item.Code} className={`p-4 rounded-xl border bg-white ${stock <= 0 ? 'opacity-60' : low ? 'border-orange-300 bg-orange-50' : 'border-slate-100'}`}>
-                  <div className="flex justify-between mb-2">
-                    <div className="truncate pr-2">
-                      <div className="flex gap-2 items-center mb-1">
-                        <span className="text-[9px] text-blue-500 font-bold uppercase bg-blue-50 px-1 rounded">{item.Category}</span>
-                        <span className="text-[9px] text-slate-400 font-mono font-bold">#{item.Code}</span>
-                      </div>
-                      <h3 className="font-bold text-sm truncate">{item.Item_Name}</h3>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded font-bold h-fit ${stock <= 0 ? 'bg-red-500 text-white' : 'bg-green-100 text-green-700'}`}>{stock}</span>
-                  </div>
-
-                  <button onClick={() => addToCart(item)} className="w-full mt-2 bg-blue-50 text-blue-600 py-2 rounded-lg text-xs font-bold hover:bg-blue-600 hover:text-white transition">Add to Transfer</button>
-                </div>
+          {/* GROUPED LIST VIEW */}
+          <div className="space-y-3 pb-10">
+            {(() => {
+              const filtered = inventory.filter(i => 
+                i.Item_Name?.toLowerCase().includes(searchTerm) || 
+                i.Category?.toLowerCase().includes(searchTerm) || 
+                i.Code?.toString().includes(searchTerm)
               );
-            })}
+
+              // Group by category
+              const groups = filtered.reduce((acc, item) => {
+                const cat = item.Category || "Uncategorized";
+                if (!acc[cat]) acc[cat] = [];
+                acc[cat].push(item);
+                return acc;
+              }, {});
+
+              return Object.entries(groups).sort().map(([category, items]) => (
+                <div key={category} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-1.5 border-b border-slate-100 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{category}</span>
+                    <span className="text-[9px] font-bold text-slate-400">{items.length} items</span>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {items.map(item => {
+                      const stock = Number(item[user.location]) || 0;
+                      return (
+                        <div key={item.Code} className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition-colors group">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-mono font-bold text-slate-400">#{item.Code}</span>
+                              <h3 className="text-xs font-semibold text-slate-700 truncate">{item.Item_Name}</h3>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <span className={`text-xs font-black ${stock <= 0 ? 'text-red-500' : 'text-slate-700'}`}>{stock}</span>
+                              <p className="text-[8px] font-bold text-slate-300 uppercase leading-none">In Stor</p>
+                            </div>
+                            <button 
+                              onClick={() => addToCart(item)} 
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Plus size={14}/>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
       </div>
 
-      {/* Cart Sidebar remains same */}
-      <div className="w-80 bg-white border-l shadow-xl flex flex-col">
-          <div className="p-4 border-b bg-slate-50 font-bold">Transfer Cart</div>
-          <div className="p-4 bg-white border-b">
-            <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Destination Clinic:</label>
-            <select value={targetLoc} onChange={e => setTargetLoc(e.target.value)} className="w-full border rounded p-2 text-sm font-bold">
-              {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l}>{l}</option>)}
+      {/* COMPACT CART SIDEBAR */}
+      <div className="w-64 bg-white border-l shadow-2xl flex flex-col">
+          <div className="p-3 border-b bg-slate-800 text-white text-xs font-black uppercase tracking-widest">Transfer Cart</div>
+          <div className="p-3 bg-slate-50 border-b">
+            <label className="text-[9px] font-black text-slate-400 block mb-1 uppercase">Destination:</label>
+            <select 
+              value={targetLoc} 
+              onChange={e => setTargetLoc(e.target.value)} 
+              className="w-full border-slate-200 rounded-lg p-1.5 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {clinics.map(l => <option key={l}>{l}</option>)}
             </select>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {cart.map(c => <div key={c.cartId} className="text-xs p-2 bg-slate-50 rounded border flex justify-between items-center">
-              <span>{c.name}</span><div className="flex items-center gap-2"><b>x{c.qty}</b><button onClick={()=>setCart(cart.filter(x=>x.cartId!==c.cartId))} className="text-red-400">×</button></div>
-            </div>)}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            {cart.map(c => (
+              <div key={c.cartId} className="text-[10px] p-2 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center group">
+                <span className="truncate pr-2 font-medium">{c.name}</span>
+                <div className="flex items-center gap-2">
+                  <b className="text-blue-600">x{c.qty}</b>
+                  <button onClick={()=>setCart(cart.filter(x=>x.cartId!==c.cartId))} className="text-slate-300 hover:text-red-500">×</button>
+                </div>
+              </div>
+            ))}
+            {cart.length === 0 && <p className="text-[10px] text-center text-slate-400 mt-10 italic">Cart is empty</p>}
           </div>
-          <div className="p-4 border-t">
+          <div className="p-3 border-t bg-slate-50">
             {txnId ? (
-              <div className="text-center">
-                <QRCodeCanvas value={txnId} size={140} className="mx-auto border p-2 rounded" />
-                <p className="mt-2 font-mono text-xs font-bold text-green-600">{txnId}</p>
-                <button onClick={()=>{setTxnId(null); setCart([]);}} className="text-xs underline mt-2 text-slate-400">Next Transfer</button>
+              <div className="text-center p-2 bg-white rounded-xl border shadow-inner">
+                <QRCodeCanvas value={txnId} size={110} className="mx-auto" />
+                <p className="mt-2 font-mono text-[10px] font-bold text-blue-600">{txnId}</p>
+                <button onClick={()=>{setTxnId(null); setCart([]);}} className="text-[9px] font-black uppercase text-slate-400 mt-2 block w-full hover:text-slate-600">Clear</button>
               </div>
             ) : (
-              <button onClick={handleCheckout} disabled={cart.length === 0 || loading} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold">
-                {loading ? "Processing..." : `Transfer to ${targetLoc}`}
+              <button 
+                onClick={handleCheckout} 
+                disabled={cart.length === 0 || loading} 
+                className={`w-full py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${cart.length === 0 ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 active:scale-95'}`}
+              >
+                {loading ? "..." : `Send to ${targetLoc}`}
               </button>
             )}
           </div>
