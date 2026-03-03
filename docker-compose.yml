@@ -1,0 +1,9 @@
+services:
+  inventory-app:
+    build: .
+    container_name: inventory_system
+    restart: always
+    environment:
+      - GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/AKfycbz-4CQeSwi6OTD2tKN7--Drr6layauYyBjjEWtS3Fnn5WOoB-nfIQez1X6X9z_bNhb1/exec
+    ports:
+      - "3000:3000"
