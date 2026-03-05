@@ -43,7 +43,7 @@ const Login = ({ setUser }) => {
         // 2. Password correct, now trigger OTP
         const userObj = setupData.users.find(u => u.username === selectedUser);
         console.log("Sending OTP to:", userObj.email); // IS THIS PRINTING A REAL EMAIL?
-        const otpRes = await fetch(`${API_URL}?action=sendOTP&email=${userObj.email}`);
+        const otpRes = await fetch(`${API_URL}?action=sendOTP&user=${selectedUser.username}&email=${selectedUser.email}`);
         const otpData = await otpRes.json();
         console.log("Server Response:", otpData);
 
