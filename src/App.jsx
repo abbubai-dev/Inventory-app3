@@ -40,10 +40,22 @@ const Login = ({ setUser }) => {
       const data = await res.json();
 
       if (data.authenticated) {
-        // 2. Password correct, now trigger OTP
+        // 1. Find the full user object from your setupData
         const userObj = setupData.users.find(u => u.username === selectedUser);
-        console.log("Sending OTP to:", userObj.email); // IS THIS PRINTING A REAL EMAIL?
-        const otpRes = await fetch(`${API_URL}?action=sendOTP&user=${selectedUser.username}&email=${selectedUser.email}`);
+
+        if (!userObj || !userObj.email) {
+        alert("Error: This user has no email registered in the system.");
+        setLoading(false);
+        return;
+        }
+
+        console.log("Sending OTP to:", userObj.email);
+
+        // 2. FIX: Use userObj.username and userObj.email instead of selectedUser
+        const otpRes = await fetch(
+        `${API_URL}?action=sendOTP&user=${encodeURIComponent(userObj.username)}&email=${encodeURIComponent(userObj.email)}`
+        );
+    
         const otpData = await otpRes.json();
         console.log("Server Response:", otpData);
 
