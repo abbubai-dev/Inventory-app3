@@ -3,7 +3,7 @@ services:
     build: .
     container_name: inventory_system
     restart: always
-    environment:
-      - GOOGLE_SCRIPT_URL=process.env.GOOGLE_SCRIPT_URL
+    # This line tells Docker to pull all variables from your .env file
+    env_file: .env
     ports:
       - "3000:3000"

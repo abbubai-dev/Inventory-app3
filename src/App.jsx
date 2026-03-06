@@ -10,7 +10,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const API_URL = "/.netlify/functions/inventory-proxy";
+const API_URL = import.meta.env.VITE_APP_API_URL || "/api/proxy";
 
 // --- LOGIN COMPONENT WITH DROPDOWNS ---
 const Login = ({ setUser }) => {
@@ -695,7 +695,7 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-r from-orange-400 via-pink-500 to-purple-600 flex flex-col font-sans">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col font-sans">
       <header className="bg-white p-4 border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-2">
           {view !== 'menu' && (
