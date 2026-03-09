@@ -1057,44 +1057,44 @@ const ClinicDashboard = ({ user, logout }) => {
               </div>
 
               {/* ---------- DATE FILTER & PDF ---------- */}
-<div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
-  <div className="flex justify-between items-center">
-    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-      Filter & Export
-    </h3>
-    {(startDate || endDate) && (
-      <button
-        onClick={() => {
-          setStartDate('');
-          setEndDate('');
-        }}
-        className="text-[10px] text-red-500 font-bold"
-      >
-        Reset
-      </button>
-    )}
-  </div>
+              <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Filter & Export
+                  </h3>
+                  {(startDate || endDate) && (
+                  <button
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                    }}
+                    className="text-[10px] text-red-500 font-bold"
+                    >
+                    Reset
+                  </button>
+                  )}
+                </div>
 
-  <div className="grid grid-cols-2 gap-2">
-    <div>
-      <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
-      <input
-        type="date"
-        value={startDate}
-        onChange={(e) => setStartDate(e.target.value)}
-        className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-      />
-    </div>
-    <div>
-      <p className="text-[9px] text-slate-400 ml-1">End Date</p>
-      <input
-        type="date"
-        value={endDate}
-        onChange={(e) => setEndDate(e.target.value)}
-        className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-      />
-    </div>
-  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+                      />
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-slate-400 ml-1">End Date</p>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
+                      />
+                  </div>
+                </div>
 
   {/* ---------- PDF EXPORT ---------- */}
   <button
@@ -1420,29 +1420,38 @@ const ClinicDashboard = ({ user, logout }) => {
 
     {/* --- LOW STOCK ALERT MODAL --- */}
 {showLowStockModal && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-    <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-in zoom-in duration-200">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-2 text-red-600">
-          <AlertTriangle size={20} />
-          <h3 className="font-bold text-lg">Stock Alerts</h3>
+  <div className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4 backdrop-blur-md">
+    <div className="bg-white w-full max-w-sm rounded-4xl p-6 shadow-2xl animate-in fade-in zoom-in duration-300">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-3 text-red-600">
+          <div className="p-2 bg-red-100 rounded-lg">
+            <AlertTriangle size={24} />
+          </div>
+          <h3 className="font-extrabold text-xl tracking-tight">Stock Alerts</h3>
         </div>
-        <button onClick={() => setShowLowStockModal(false)} className="p-2 bg-slate-100 rounded-full text-slate-400">✕</button>
+        <button 
+          onClick={() => setShowLowStockModal(false)} 
+          className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
+        >
+          <X size={20} />
+        </button>
       </div>
 
-      <div className="max-h-64 overflow-y-auto space-y-2 mb-6 pr-1">
+      <div className="max-h-80 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
         {inventory
-          .filter(item => (Number(item[locKey]) || 0) < (item.MinStock || 0))
+          .filter(item => (Number(item[locKey]) || 0) < (Number(item.MinStock) || 0))
           .sort((a, b) => (Number(a[locKey]) || 0) - (Number(b[locKey]) || 0))
           .map((item, idx) => (
-            <div key={idx} className="flex justify-between items-center p-3 bg-red-50 rounded-xl border border-red-100">
-              <div>
-                <p className="text-xs font-bold text-slate-800">{item.Item_Name}</p>
-                <p className="text-[10px] text-red-500 font-medium">Min: {item.MinStock} units required</p>
+            <div key={idx} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100">
+              <div className="flex-1 pr-2">
+                <p className="text-sm font-bold text-slate-900 leading-tight">{item.Item_Name}</p>
+                <p className="text-[11px] text-red-500 font-semibold mt-1">
+                  Threshold: {item.MinStock} units
+                </p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-black text-red-600">{item[locKey] || 0}</p>
-                <p className="text-[9px] text-slate-400 uppercase font-bold">In Stock</p>
+                <p className="text-lg font-black text-red-600 leading-none">{item[locKey] || 0}</p>
+                <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">Left</p>
               </div>
             </div>
           ))}
@@ -1450,13 +1459,13 @@ const ClinicDashboard = ({ user, logout }) => {
 
       <button 
         onClick={() => { setShowLowStockModal(false); setView('restock'); }}
-        className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold active:scale-95 transition flex items-center justify-center gap-2"
+        className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
       >
-        <Plus size={16} /> Request Restock
+        <Plus size={18} /> Request Restock Now
       </button>
     </div>
   </div>
-  )}
+)}
   </div>
 )}
 
@@ -1466,6 +1475,23 @@ const ClinicDashboard = ({ user, logout }) => {
     </div>
   );
 };
+
+// Add this useEffect to trigger the modal automatically
+useEffect(() => {
+  // Only check if inventory has data
+  if (inventory && inventory.length > 0) {
+    const hasLowStock = inventory.some(item => {
+      const currentStock = Number(item[locKey]) || 0;
+      const minStock = Number(item.MinStock) || 0;
+      return currentStock < minStock;
+    });
+
+    if (hasLowStock) {
+      // Small delay ensures the UI is ready to animate the modal
+      setTimeout(() => setShowLowStockModal(true), 500);
+    }
+  }
+}, [inventory, locKey]); // This triggers whenever inventory data arrives
 
 export default function App() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user')));

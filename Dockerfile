@@ -18,4 +18,4 @@ RUN npm install --omit=dev axios express
 COPY server.js . 
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "server.cjs"]
