@@ -433,6 +433,7 @@ const AdminDashboard = ({ user, logout }) => {
         <h1 className="text-2xl font-bold mb-8">User Management</h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
           {/* Add User Form */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border">
             <h3 className="font-bold mb-4">Add New User</h3>
@@ -516,23 +517,6 @@ const ClinicDashboard = ({ user, logout }) => {
       return true;
     });
   };
-
-  // Add this useEffect to trigger the modal automatically
-  useEffect(() => {
-  // Only check if inventory has data
-  if (inventory && inventory.length > 0) {
-    const hasLowStock = inventory.some(item => {
-      const currentStock = Number(item[locKey]) || 0;
-      const minStock = Number(item.MinStock) || 0;
-      return currentStock < minStock;
-    });
-
-    if (hasLowStock) {
-      // Small delay ensures the UI is ready to animate the modal
-      setTimeout(() => setShowLowStockModal(true), 500);
-    }
-  }
-  }, [inventory, locKey]); // This triggers whenever inventory data arrives
 
   // ✅ FIX 2: Fixed PDF Export to include Summary and proper data access
   const exportToPDF = () => {
@@ -632,6 +616,23 @@ const ClinicDashboard = ({ user, logout }) => {
       return () => s.clear().catch(()=>{});
     }
   }, [view]);
+
+  // Add this useEffect to trigger the modal automatically
+  useEffect(() => {
+  // Only check if inventory has data
+  if (inventory && inventory.length > 0) {
+    const hasLowStock = inventory.some(item => {
+      const currentStock = Number(item[locKey]) || 0;
+      const minStock = Number(item.MinStock) || 0;
+      return currentStock < minStock;
+    });
+
+    if (hasLowStock) {
+      // Small delay ensures the UI is ready to animate the modal
+      setTimeout(() => setShowLowStockModal(true), 500);
+    }
+  }
+  }, [inventory, locKey]); // This triggers whenever inventory data arrives
 
   const handleReceive = async (txnId) => {
     const recipientName = user.name; 
