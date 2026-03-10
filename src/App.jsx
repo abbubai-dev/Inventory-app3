@@ -392,73 +392,27 @@ const WarehouseDashboard = ({ user, logout }) => {
 const AdminDashboard = ({ user, logout }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  // --- Inside AdminDashboard ---
-const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [] });
-const [reportLoading, setReportLoading] = useState(false);
-const [activeTab, setActiveTab] = useState('users'); // To switch between User Management and Reports
+  const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [] });
+  const [reportLoading, setReportLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('users');
 
-const fetchGlobalHistory = async () => {
-  setReportLoading(true);
-  try {
-    const res = await fetch(`${API_URL}?action=getHistory&location=ALL`);
-    const data = await res.json();
-    setAdminHistory(data);
-  } catch (err) {
-    console.error("Failed to fetch reports", err);
-  } finally {
-    setReportLoading(false);
-  }
-};
-
-const exportAdminPDF = (type) => {
-  const doc = new jsPDF();
-  const data = type === 'in' ? adminHistory.transfers : adminHistory.usage;
-  const title = type === 'in' ? "Global Incoming Stock Report" : "Global Usage Report";
-
-  if (!data || data.length === 0) return alert("No data available to export.");
-
-  // Page 1: Transaction Details
-  doc.setFontSize(18);
-  doc.text(title, 14, 20);
-  
-  const headers = type === 'in' 
-    ? [["Date", "ID", "From", "To", "Status"]] 
-    : [["Date", "Location", "Item Name", "Qty"]];
-
-  const rows = data.map(item => type === 'in'
-    ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.To, item.Status]
-    : [new Date(item.Timestamp).toLocaleDateString(), item.Location, item.Item_Name, item.Qty]
-  );
-
-  doc.autoTable({ head: headers, body: rows, startY: 30 });
-
-  // Page 2: Summary (The "Summary Button" logic)
-  doc.addPage();
-  doc.text("Inventory Consumption Summary", 14, 20);
-  
-  // Logic to calculate totals across all clinics
-  const summaryMap = data.reduce((acc, curr) => {
-    const key = curr.Item_Name || "Transfers";
-    acc[key] = (acc[key] || 0) + (Number(curr.Qty) || 1);
-    return acc;
-  }, {});
-
-  const summaryRows = Object.entries(summaryMap).map(([name, total]) => [name, total]);
-
-  doc.autoTable({
-    head: [["Item Name / Category", "Total Volume"]],
-    body: summaryRows,
-    startY: 30,
-    headStyles: { fillColor: [37, 99, 235] }
-  });
-
-  doc.save(`Admin_Global_Report_${new Date().toLocaleDateString()}.pdf`);
-};
+  const fetchGlobalHistory = async () => {
+    setReportLoading(true);
+    try {
+      const res = await fetch(`${API_URL}?action=getHistory&location=Admin`);
+      const data = await res.json();
+      setAdminHistory(data);
+    } catch (err) {
+      console.error("Failed to fetch reports", err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetch(`${API_URL}?action=getLoginData`)
       .then(res => res.json())
-      .then(data => setUsers(data.users));
+      .then(data => setUsers(data.users || []));
   }, []);
 
   const handleAddUser = async (e) => {
@@ -473,12 +427,44 @@ const exportAdminPDF = (type) => {
       location: e.target.location.value
     };
 
-    await fetch(API_URL, { method: 'POST', body: JSON.stringify(formData) });
-    alert("User Added Successfully");
-    e.target.reset();
-    setLoading(false);
-    // Refresh list
-    fetch(`${API_URL}?action=getLoginData`).then(res => res.json()).then(data => setUsers(data.users));
+    try {
+      await fetch(API_URL, { method: 'POST', body: JSON.stringify(formData) });
+      alert("User Added Successfully");
+      e.target.reset();
+      const res = await fetch(`${API_URL}?action=getLoginData`);
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch (err) {
+      alert("Failed to add user");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportAdminPDF = (type) => {
+    const doc = new jsPDF();
+    const data = type === 'in' ? adminHistory.transfers : adminHistory.usage;
+    const title = type === 'in' ? "Global Incoming Stock Report" : "Global Usage Report";
+    if (!data || data.length === 0) return alert("No data available to export.");
+
+    doc.setFontSize(18);
+    doc.text(title, 14, 20);
+    const headers = type === 'in' ? [["Date", "ID", "From", "To", "Status"]] : [["Date", "Location", "Item Name", "Qty"]];
+    const rows = data.map(item => type === 'in' 
+      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.To, item.Status]
+      : [new Date(item.Timestamp).toLocaleDateString(), item.Location, item.Item_Name, item.Qty]
+    );
+    doc.autoTable({ head: headers, body: rows, startY: 30 });
+    doc.addPage();
+    doc.text("Inventory Summary", 14, 20);
+    const summaryMap = data.reduce((acc, curr) => {
+      const key = curr.Item_Name || "Transfers";
+      acc[key] = (acc[key] || 0) + (Number(curr.Qty) || 1);
+      return acc;
+    }, {});
+    const summaryRows = Object.entries(summaryMap).map(([name, total]) => [name, total]);
+    doc.autoTable({ head: [["Item Name", "Total Volume"]], body: summaryRows, startY: 30 });
+    doc.save(`Global_Report_${type}.pdf`);
   };
 
   return (
@@ -486,40 +472,63 @@ const exportAdminPDF = (type) => {
       <div className="w-64 bg-slate-900 text-white p-6">
         <h2 className="text-xl font-bold mb-8 flex items-center gap-2"><ShieldCheck/> Admin</h2>
         <nav className="space-y-4">
-          {/* User Management Tab */}
-          <div 
-            onClick={() => setActiveTab('users')}
-            className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-            >
+          <div onClick={() => setActiveTab('users')} className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
             <Users size={20}/> User Management
           </div>
-
-          {/* Reports Tab - NEW */}
-          <div 
-            onClick={() => { setActiveTab('reports'); fetchGlobalHistory(); }}
-            className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-            >
+          <div onClick={() => { setActiveTab('reports'); fetchGlobalHistory(); }} className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
             <FileText size={20}/> System Reports
           </div>
-
-          <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white w-full mt-8 border-t border-slate-800 pt-8">
-            <LogOut size={20}/> Logout
-          </button>
+          <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white w-full mt-8 border-t border-slate-800 pt-8"><LogOut size={20}/> Logout</button>
         </nav>
       </div>
 
       <div className="flex-1 p-8 overflow-y-auto">
-        {/* VIEW 1: USER MANAGEMENT */}
         {activeTab === 'users' && (
           <div className="animate-in fade-in duration-500">
             <h1 className="text-2xl font-bold mb-8 text-slate-800">User Management</h1>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* ... Keep your Add User Form & User List here ... */}
+              {/* Add User Form */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border">
+                <h3 className="font-bold mb-4">Add New User</h3>
+                <form onSubmit={handleAddUser} className="space-y-4">
+                  <input name="username" placeholder="Username" className="w-full p-3 border rounded-xl" required />
+                  <input name="password" type="password" placeholder="Password" className="w-full p-3 border rounded-xl" required />
+                  <input name="email" type="email" placeholder="Email" className="w-full p-3 border rounded-xl" required />
+                  <div className="grid grid-cols-2 gap-4">
+                    <select name="role" className="p-3 border rounded-xl">
+                      <option value="Clinic">Clinic</option>
+                      <option value="STOR">STOR</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                    <select name="location" className="p-3 border rounded-xl">
+                      {["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">
+                    {loading ? "Registering..." : "Register User"}
+                  </button>
+                </form>
+              </div>
+
+              {/* User List */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border">
+                <h3 className="font-bold mb-4">Current Users</h3>
+                <div className="space-y-2 max-h-100 overflow-y-auto">
+                  {users.map((u, i) => (
+                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border">
+                      <div>
+                        <p className="font-bold text-sm">{u.username}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">{u.role} • {u.location}</p>
+                      </div>
+                      <div className="text-slate-300">#{i + 1}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
-        {/* VIEW 2: SYSTEM REPORTS - NEW */}
         {activeTab === 'reports' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center mb-8">
@@ -528,28 +537,14 @@ const exportAdminPDF = (type) => {
                 <p className="text-slate-400 text-sm">Download aggregated data across all clinics</p>
               </div>
               <div className="flex gap-3">
-                <button 
-                  onClick={() => exportAdminPDF('in')} 
-                  className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition"
-                  >
-                  <Download size={18}/> Incoming Report
-                </button>
-                <button 
-                  onClick={() => exportAdminPDF('out')} 
-                  className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition"
-                  >
-                  <Download size={18}/> Usage Report
-                </button>
+                <button onClick={() => exportAdminPDF('in')} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Download size={18}/> Incoming Report</button>
+                <button onClick={() => exportAdminPDF('out')} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Download size={18}/> Usage Report</button>
               </div>
             </div>
-
-            {/* Optional: Add a simple data preview table here */}
             <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center py-20">
-              <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="text-slate-300" size={32} />
-              </div>
+              <FileText className="text-slate-200 mx-auto mb-4" size={48} />
               <h3 className="font-bold text-slate-800">Reports are ready</h3>
-              <p className="text-slate-400 text-sm max-w-xs mx-auto">Click the buttons above to generate a PDF with full summaries and transaction logs.</p>
+              <p className="text-slate-400 text-sm">Generate PDFs to see total volumes and logs.</p>
             </div>
           </div>
         )}
@@ -746,19 +741,27 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   const handleUsageSubmit = async () => {
-    if (cart.length === 0) return;
-    if (!confirm("Deduct usage from your shelf?")) return;
-    setActionLoading(true);
-    try {
-      const response = await fetch(API_URL, { 
-        method: 'POST', 
-        body: JSON.stringify({ 
-          action: 'recordUsage', 
-          location: locKey, 
-          cart: cart,
-          user: user.name 
-        }) 
-      });
+  if (cart.length === 0) return;
+  if (!confirm("Deduct usage from your shelf?")) return;
+  setActionLoading(true);
+  
+  // SANITIZE DATA: Ensure code is string and quantity is number
+  const sanitizedCart = cart.map(item => ({
+    name: item.name,
+    code: String(item.code || item.Code).trim(), // Force to string
+    qty: Number(item.qty)
+  }));
+
+  try {
+    const response = await fetch(API_URL, { 
+      method: 'POST', 
+      body: JSON.stringify({ 
+        action: 'recordUsage', 
+        location: locKey, 
+        cart: sanitizedCart, // Use the sanitized version
+        user: user.name 
+      }) 
+    });
       const result = await response.json();
       if (result.status === 'success') {
         setCart([]); 
@@ -773,29 +776,67 @@ const ClinicDashboard = ({ user, logout }) => {
   };
 
   const handleClinicTransfer = async () => {
-    if (!targetLoc) return alert("Select destination clinic");
-    if (cart.length === 0) return;
-    setActionLoading(true);
-    try {
-      const res = await fetch(API_URL, { 
-        method: 'POST', 
-        body: JSON.stringify({ 
-          action: 'checkout', 
-          from: user.location, 
-          to: targetLoc, 
-          cart: cart 
-        }) 
-      });
-      const data = await res.json();
-      setTxnId(data.txnId); 
+  if (!targetLoc) return alert("Select destination clinic");
+  if (cart.length === 0) return;
+  setActionLoading(true);
+
+  // SANITIZE DATA
+  const sanitizedCart = cart.map(item => ({
+    name: item.name,
+    code: String(item.code || item.Code).trim(),
+    qty: Number(item.qty)
+  }));
+
+  try {
+    const res = await fetch(API_URL, { 
+      method: 'POST', 
+      body: JSON.stringify({ 
+        action: 'checkout', // ✅ MUST be 'checkout' for transfers
+        from: user.location, 
+        to: targetLoc, 
+        cart: sanitizedCart 
+      }) 
+    });
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      setTxnId(data.txnId); // This triggers the QR code display
       setCart([]);
+      setStatus({msg: 'Transfer Initiated'});
       refreshData();
-    } catch (err) {
-      alert("Transfer failed");
-    } finally {
-      setActionLoading(false);
+      // Don't automatically switch view so the user can see/save the QR code
+    } else {
+      alert("Transfer failed: " + (data.message || "Unknown error"));
     }
-  };
+  } catch (err) {
+    alert("Transfer failed. Check connection.");
+  } finally {
+    setActionLoading(false);
+  }
+};
+
+const handleRefillRequest = async (items) => {
+  setActionLoading(true);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'refillRequest',
+        location: user.location,
+        items: items.map(i => ({ name: i.Item_Name, stock: i[locKey] }))
+      })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      alert("Refill request sent to STOR via email.");
+      setShowLowStockModal(false);
+    }
+  } catch (err) {
+    alert("Failed to send request.");
+  } finally {
+    setActionLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col font-sans">
@@ -1166,36 +1207,43 @@ const ClinicDashboard = ({ user, logout }) => {
     {/* 3. The Data List */}
     <div className="space-y-4">
       {(() => {
-        // Safety check: ensure we have an array to work with
-        const rawData = histTab === 'in' ? (history.transfers || []) : (history.usage || []);
-        
-        // Filter logic
-        const filtered = rawData.filter(item => {
-          const rawDate = item.CreatedAt || item.Timestamp;
-          if (!rawDate) return false;
-          const itemDate = new Date(rawDate).toISOString().split('T')[0];
-          return (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
-        });
+                const raw = histTab === 'in' ? (history?.transfers || []) : (history?.usage || []);
+  
+                // 1. Group by Date (YYYY-MM-DD)
+                const groupedByDate = raw.reduce((acc, item) => {
+                  const date = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+                  if (!acc[date]) acc[date] = [];
+                  acc[date].push(item);
+                  return acc;
+                }, {});
 
-        if (loading) return <div className="py-10 text-center text-slate-400 text-xs font-bold animate-pulse">Fetching records...</div>;
-        if (filtered.length === 0) return <p className="text-center text-slate-400 text-xs py-10">No records found for this period.</p>;
+                return Object.keys(groupedByDate).sort().reverse().map(date => (
+                  <div key={date} className="space-y-2">
+                    <h3 className="text-xs font-black text-slate-400 uppercase p-2">{new Date(date).toLocaleDateString('en-GB')}</h3>
+      
+                    {/* 2. Group items inside that date by User */}
+                    {(() => {
+                              const usersInDate = groupedByDate[date].reduce((acc, item) => {
+                                const user = item.User || item.From || "Staff";
+                                if (!acc[user]) acc[user] = [];
+                                acc[user].push(item);
+                                return acc;
+                              }, {});
 
-        return filtered.map((item, idx) => (
-          <div key={idx} className="p-4 bg-white border rounded-2xl shadow-sm border-slate-100">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px] font-bold text-blue-600">
-                {new Date(item.CreatedAt || item.Timestamp).toLocaleDateString('en-GB')}
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-500'}`}>
-                {item.Status || "Usage Logged"}
-              </span>
-            </div>
-            <p className="text-sm font-bold text-slate-800">{item.Item_Name || item.TransactionID}</p>
-            <p className="text-xs text-slate-500 font-medium">
-              {item.Qty ? `Quantity: ${item.Qty}` : `Source: ${item.From}`} • {item.User || 'Staff'}
-            </p>
-          </div>
-        ));
+                              return Object.entries(usersInDate).map(([user, items]) => (
+                                <div key={user} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                  <p className="text-[10px] font-black text-blue-600 mb-2 uppercase">{user}</p>
+                                  {items.map((it, idx) => (
+                                    <div key={idx} className="flex justify-between text-sm py-1 border-t border-slate-50">
+                                      <span className="text-slate-600">{it.Item_Name || it.TransactionID}</span>
+                                      <span className="font-bold">x{it.Qty || "1"}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ));
+                      })()}
+                  </div>
+                ));
       })()}
     </div>
   </div>
@@ -1209,6 +1257,7 @@ const ClinicDashboard = ({ user, logout }) => {
       {showLowStockModal && (
         <div className="fixed inset-0 bg-black/60 z-9999 flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-white w-full max-w-sm rounded-4xl p-6 shadow-2xl animate-in fade-in zoom-in duration-300">
+            {/* Header */}
             <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3 text-red-600">
                 <AlertTriangle size={24} />
@@ -1217,29 +1266,49 @@ const ClinicDashboard = ({ user, logout }) => {
               <button onClick={() => setShowLowStockModal(false)} className="p-2 bg-slate-100 rounded-full text-slate-500">✕</button>
             </div>
 
-            <div className="max-h-80 overflow-y-auto space-y-3 mb-6 pr-1">
+            {/* List Area */}
+            <div className="max-h-64 overflow-y-auto space-y-3 mb-6 pr-1">
               {(inventory || [])
-                .filter(item => (Number(item[locKey]) || 0) < (Number(item.MinStock) || 0) && Number(item.MinStock) > 0)
+                .filter(item => {
+                  const stock = Number(item[locKey]) || 0;
+                  const min = Number(item.MinStock) || 0;
+                  return min > 0 && stock < min;
+                })
                 .map((item, idx) => (
                   <div key={idx} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100">
                     <div className="flex-1 pr-2">
                       <p className="text-sm font-bold text-slate-900 leading-tight">{item.Item_Name}</p>
-                      <p className="text-[11px] text-red-500 font-semibold mt-1">Min: {item.MinStock} units</p>
+                      <p className="text-[11px] text-red-500 font-semibold mt-1">Target: {item.MinStock}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-black text-red-600">{item[locKey] || 0}</p>
                       <p className="text-[10px] text-slate-500 uppercase font-bold">Left</p>
                     </div>
                   </div>
-                ))}
+              ))}
             </div>
 
-            <button 
-              onClick={() => { setShowLowStockModal(false); setView('restock'); }}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2"
-            >
-              <Plus size={18} /> View Restock List
-            </button>
+            {/* Action Buttons: Stacked for Mobile UX */}
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <button onClick={() => setShowLowStockModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold active:scale-95 transition">
+                  Dismiss
+                </button>
+                <button 
+                  onClick={() => handleRefillRequest(inventory.filter(i => (Number(i[locKey]) || 0) < (Number(i.MinStock) || 0)))}
+                  disabled={actionLoading}
+                  className="flex-2 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition flex items-center justify-center gap-2"
+                  >
+                  {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Request Refill"}
+                </button>
+              </div>
+              <button 
+                onClick={() => { setShowLowStockModal(false); setView('restock'); }}
+                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition"
+                >
+                <Plus size={18} /> View Restock List
+              </button>
+            </div>
           </div>
         </div>
       )}  
