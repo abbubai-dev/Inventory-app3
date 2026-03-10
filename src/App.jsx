@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { 
-  Plus, Minus, QrCode, LogOut, Package, Search, 
+  Plus, Minus, QrCode, LogOut, Package, Search, FileText, ClipboardList, Package,
   ChevronLeft, ChevronUp, ChevronDown, AlertTriangle, History, ArrowDownToLine, 
-  ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin
+  ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin, FileUp
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -1187,65 +1187,190 @@ const handleRefillRequest = async (items) => {
           ))}
 
           {view === 'history' && (
-  <div className="space-y-4 animate-in fade-in duration-500">
-    {/* 1. Tab Switcher */}
-    <div className="flex bg-slate-200 p-1 rounded-xl">
-      <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
-      <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
+  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
+    
+    {/* 1. Header: Tab Switcher & PDF Export */}
+    <div className="flex justify-between items-center gap-3">
+      <div className="flex bg-slate-200 p-1.5 rounded-2xl flex-1 shadow-inner">
+        <button 
+          onClick={() => setHistTab('in')} 
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${histTab === 'in' ? 'bg-white shadow-md text-blue-600 scale-[1.02]' : 'text-slate-500'}`}
+        >
+          Received
+        </button>
+        <button 
+          onClick={() => setHistTab('out')} 
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all ${histTab === 'out' ? 'bg-white shadow-md text-blue-600 scale-[1.02]' : 'text-slate-500'}`}
+        >
+          Usage
+        </button>
+      </div>
+      <button 
+        onClick={exportToPDF} 
+        className="p-3.5 bg-slate-900 text-white rounded-2xl active:scale-90 transition shadow-lg"
+        title="Export PDF"
+      >
+        <Download size={20}/>
+      </button>
     </div>
 
     {/* 2. Date Filters */}
-    <div className="bg-white p-4 rounded-xl border shadow-sm grid grid-cols-2 gap-2">
-      <div className="col-span-2 flex justify-between mb-1">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter Period</span>
-        {(startDate || endDate) && <button onClick={() => {setStartDate(''); setEndDate('');}} className="text-[10px] text-red-500 font-bold">Reset</button>}
+    <div className="bg-white p-5 rounded-4xl border border-slate-100 shadow-sm grid grid-cols-2 gap-3">
+      <div className="col-span-2 flex justify-between items-center mb-1">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter by Date Range</span>
+        {(startDate || endDate) && (
+          <button onClick={() => {setStartDate(''); setEndDate('');}} className="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded-lg">Reset</button>
+        )}
       </div>
-      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-xs p-2 border rounded-lg bg-slate-50" />
-      <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-xs p-2 border rounded-lg bg-slate-50" />
+      <div className="space-y-1">
+        <p className="text-[9px] text-slate-400 font-bold ml-1">START</p>
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-xs p-3 border-0 bg-slate-50 rounded-xl w-full focus:ring-2 focus:ring-blue-500 outline-none" />
+      </div>
+      <div className="space-y-1">
+        <p className="text-[9px] text-slate-400 font-bold ml-1">END</p>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-xs p-3 border-0 bg-slate-50 rounded-xl w-full focus:ring-2 focus:ring-blue-500 outline-none" />
+      </div>
     </div>
 
-    {/* 3. The Data List */}
-    <div className="space-y-4">
+    {/* 3. The Grouped Data List */}
+    <div className="space-y-6">
       {(() => {
-                const raw = histTab === 'in' ? (history?.transfers || []) : (history?.usage || []);
-  
-                // 1. Group by Date (YYYY-MM-DD)
-                const groupedByDate = raw.reduce((acc, item) => {
-                  const date = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
-                  if (!acc[date]) acc[date] = [];
-                  acc[date].push(item);
-                  return acc;
-                }, {});
+        // --- DATA FILTERING ---
+        const raw = histTab === 'in' ? (history?.transfers || []) : (history?.usage || []);
+        
+        const filtered = raw.filter(item => {
+          const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+          if (startDate && itemDate < startDate) return false;
+          if (endDate && itemDate > endDate) return false;
+          return true;
+        });
 
-                return Object.keys(groupedByDate).sort().reverse().map(date => (
-                  <div key={date} className="space-y-2">
-                    <h3 className="text-xs font-black text-slate-400 uppercase p-2">{new Date(date).toLocaleDateString('en-GB')}</h3>
-      
-                    {/* 2. Group items inside that date by User */}
-                    {(() => {
-                              const usersInDate = groupedByDate[date].reduce((acc, item) => {
-                                const user = item.User || item.From || "Staff";
-                                if (!acc[user]) acc[user] = [];
-                                acc[user].push(item);
-                                return acc;
-                              }, {});
+        if (filtered.length === 0) return (
+          <div className="text-center py-16 bg-white rounded-4xl border border-dashed border-slate-200">
+            <div className="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+              <FileText className="text-slate-300" size={24} />
+            </div>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-tight">No records found</p>
+          </div>
+        );
 
-                              return Object.entries(usersInDate).map(([user, items]) => (
-                                <div key={user} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                  <p className="text-[10px] font-black text-blue-600 mb-2 uppercase">{user}</p>
-                                  {items.map((it, idx) => (
-                                    <div key={idx} className="flex justify-between text-sm py-1 border-t border-slate-50">
-                                      <span className="text-slate-600">{it.Item_Name || it.TransactionID}</span>
-                                      <span className="font-bold">x{it.Qty || "1"}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ));
-                      })()}
+        // --- STEP 1: Group by Date (YYYY-MM-DD) ---
+        const groupedByDate = filtered.reduce((acc, item) => {
+          const date = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
+          if (!acc[date]) acc[date] = [];
+          acc[date].push(item);
+          return acc;
+        }, {});
+
+        // Sort dates: latest first
+        return Object.keys(groupedByDate).sort().reverse().map(date => (
+          <div key={date} className="space-y-3">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-3 drop-shadow-sm">
+              {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </h3>
+            
+            {/* --- STEP 2: Group by User/Staff inside each date --- */}
+            {(() => {
+              const usersInDate = groupedByDate[date].reduce((acc, item) => {
+                const user = item.User || item.From || item.Recipient || "Unknown Staff";
+                if (!acc[user]) acc[user] = [];
+                acc[user].push(item);
+                return acc;
+              }, {});
+
+              return Object.entries(usersInDate).map(([user, items]) => (
+                <div key={user} className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm transition-all hover:shadow-md">
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className="w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-lg shadow-blue-100">
+                      {user[0].toUpperCase()}
+                    </div>
+                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">{user}</span>
                   </div>
-                ));
+                  
+                  <div className="space-y-2">
+                    {items.map((it, idx) => (
+                      <div 
+                        key={idx} 
+                        onClick={() => histTab === 'in' && setSelectedTxn(it)}
+                        className={`group flex justify-between items-center text-sm py-2.5 border-t border-slate-50 first:border-0 transition-colors ${histTab === 'in' ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-xl' : ''}`}
+                      >
+                        <div className="flex-1 pr-4">
+                          <p className="text-slate-700 font-bold text-xs leading-tight">
+                            {it.Item_Name || `TXN: ${it.TransactionID}`}
+                          </p>
+                          {histTab === 'in' && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <p className="text-[9px] text-blue-500 font-black uppercase tracking-widest">Tap for details</p>
+                              {it.Status && <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase ${it.Status === 'Completed' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>{it.Status}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 bg-slate-100 px-3 py-1 rounded-xl text-xs">
+                            x{it.Qty || it.qty || "1"}
+                          </span>
+                          {histTab === 'in' && <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        ));
       })()}
     </div>
+
+    {/* 4. DETAIL MODAL: For Unpacking Incoming JSON Items */}
+    {selectedTxn && (
+      <div className="fixed inset-0 bg-black/70 z-10000 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-md">
+        <div className="bg-white w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h3 className="font-black text-slate-900 text-xl tracking-tighter">Package Details</h3>
+              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Ref: {selectedTxn.TransactionID}</p>
+            </div>
+            <button onClick={() => setSelectedTxn(null)} className="p-3 bg-slate-100 rounded-full text-slate-500 active:bg-slate-200">
+              <LogOut size={20} className="rotate-180" />
+            </button>
+          </div>
+
+          <div className="bg-slate-50 rounded-4xl p-5 mb-8 border border-slate-100">
+            <div className="flex justify-between text-[10px] uppercase font-black text-slate-400 mb-4 tracking-widest px-2">
+              <span>Item Description</span>
+              <span>Qty</span>
+            </div>
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-2 custom-scrollbar">
+              {JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
+                <div key={i} className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-50">
+                  <span className="text-xs text-slate-800 font-bold leading-tight pr-4">{item.name || item.Item_Name}</span>
+                  <span className="text-sm font-black text-blue-600">x{item.qty || item.Qty}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 bg-slate-100 rounded-2xl text-center">
+              <p className="text-[8px] text-slate-400 uppercase font-black tracking-widest mb-1">Status</p>
+              <p className={`text-xs font-black ${selectedTxn.Status === 'Completed' ? 'text-green-600' : 'text-orange-600'}`}>{selectedTxn.Status || 'Pending'}</p>
+            </div>
+            <div className="p-4 bg-slate-100 rounded-2xl text-center">
+              <p className="text-[8px] text-slate-400 uppercase font-black tracking-widest mb-1">Origin</p>
+              <p className="text-xs font-black text-slate-800">{selectedTxn.From || 'STOR'}</p>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => setSelectedTxn(null)}
+            className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition"
+          >
+            Close Details
+          </button>
+        </div>
+      </div>
+    )}
   </div>
 )}
 
