@@ -211,7 +211,7 @@ const WarehouseDashboard = ({ user, logout }) => {
     fetch(`${API_URL}?action=getInventory`).then(res => res.json()).then(setInventory); 
   }, []);
 
-  const clinicAlerts = inventory.filter(item => 
+  const clinicAlerts = (inventory || []).filter(item => 
     clinics.some(c => (Number(item[c]) || 0) < (item.MinStock || 0))
   );
 
@@ -287,7 +287,7 @@ const WarehouseDashboard = ({ user, logout }) => {
           {/* GROUPED LIST VIEW */}
           <div className="space-y-3 pb-10">
             {(() => {
-              const filtered = inventory.filter(i => 
+              const filtered = (inventory || []).filter(i => 
                 i.Item_Name?.toLowerCase().includes(searchTerm) || 
                 i.Category?.toLowerCase().includes(searchTerm) || 
                 i.Code?.toString().includes(searchTerm)
@@ -635,7 +635,7 @@ const ClinicDashboard = ({ user, logout }) => {
 
   // ✅ FIX 1: Move getFilteredData to the top level so PDF export can see it
   const getFilteredData = () => {
-    let data = histTab === 'in' ? history.transfers : history.usage;
+    let data = histTab === 'in' ? (history.transfers || []) : (history.usage || []);
     if (!data) return [];
     return data.filter(item => {
       const itemDate = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
@@ -845,7 +845,7 @@ const ClinicDashboard = ({ user, logout }) => {
                 <p className="text-[10px] uppercase font-bold opacity-70">Low Stock</p>
                 <p className="text-xl font-black flex items-center justify-center gap-1">
                   {(() => {
-                    const count = inventory.filter(i => {
+                    const count = (inventory || []).filter(i => {
                       const stock = Number(i[locKey]) || 0;
                       const min = Number(i.MinStock) || 0;
                       return min > 0 && stock < min;
@@ -969,7 +969,7 @@ const ClinicDashboard = ({ user, logout }) => {
             <div className="space-y-3">
               <div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input placeholder="Search Name, Category, ID.." className="w-full pl-10 pr-4 py-3 border rounded-xl shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} /></div>
               <div className="bg-blue-50 p-3 rounded-xl flex justify-between items-center"><span className="text-xs font-bold text-blue-600">{cart.length} items in cart</span><button onClick={()=>setView('usage_cart')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md">Review Usage</button></div>
-              {inventory
+              {(inventory || [])
                 .filter(i => {
                   const term = searchTerm.toLowerCase();
                   const hasStock = (i[locKey] || 0) > 0;
@@ -1049,7 +1049,7 @@ const ClinicDashboard = ({ user, logout }) => {
                   </button>
                 </div>
 
-                {inventory
+                {(inventory || [])
                 .filter(i => {
                   const term = searchTerm.toLowerCase();
                   return (
@@ -1109,7 +1109,7 @@ const ClinicDashboard = ({ user, logout }) => {
           {view === 'stock' && (
             <div className="space-y-2">
               <input placeholder="Search all items..." className="w-full p-3 border rounded-xl mb-4 shadow-sm" onChange={e => setSearchTerm(e.target.value.toLowerCase())} />
-              {inventory
+              {(inventory || [])
                 .filter(i => {
                   const term = searchTerm.toLowerCase();
                   return (
@@ -1138,7 +1138,7 @@ const ClinicDashboard = ({ user, logout }) => {
             </div>
           )}
 
-          {view === 'restock' && inventory.filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
+          {view === 'restock' && (inventory || []).filter(i => (Number(i[locKey]) || 0) < (i.MinStock || 0)).map(i => (
             <div key={i.Code} className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex justify-between items-center mb-2">
               <div><p className="text-[9px] text-slate-400 font-mono">#{i.Code}</p><p className="text-sm font-bold">{i.Item_Name}</p></div>
               <div className="text-right"><p className="text-red-600 font-bold">{i[locKey] || 0}</p><p className="text-[9px] text-slate-400 uppercase">Min: {i.MinStock}</p></div>
@@ -1218,7 +1218,7 @@ const ClinicDashboard = ({ user, logout }) => {
             </div>
 
             <div className="max-h-80 overflow-y-auto space-y-3 mb-6 pr-1">
-              {inventory
+              {(inventory || [])
                 .filter(item => (Number(item[locKey]) || 0) < (Number(item.MinStock) || 0) && Number(item.MinStock) > 0)
                 .map((item, idx) => (
                   <div key={idx} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100">
