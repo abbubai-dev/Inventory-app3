@@ -15,21 +15,21 @@ app.all('/api/proxy', async (req, res) => {
   if (!GOOGLE_URL) return res.status(500).json({ error: "Config missing" });
 
   try {
-    const response = await axios({
+    const config = {
       method: req.method,
       url: GOOGLE_URL,
-      // ✅ CHANGE: Stringify the body manually to ensure Google reads it correctly
-      data: req.method === 'POST' ? JSON.stringify(req.body) : null,
-      params: req.query,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      maxRedirects: 5 
-    });
+      params: req.query, // This handles ?action=getInventory
+      maxRedirects: 5,
+      // Logic for POST data
+      data: req.method === 'POST' ? req.body : null, 
+    };
+
+    const response = await axios(config);
     res.json(response.data);
   } catch (error) {
-    console.error("Proxy Error:", error.message);
-    res.status(502).json({ error: "Connection to Google failed" });
+    // If Google sends back that HTML error, let's see why
+    console.error("Proxy Error Details:", error.response?.data || error.message);
+    res.status(502).json({ error: "Google Script rejected the request" });
   }
 });
 
