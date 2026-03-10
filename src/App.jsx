@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { 
-  Plus, Minus, QrCode, LogOut, Package, Search, FileText, ClipboardList, Package,
+  Plus, Minus, QrCode, LogOut, Package, Search, FileText, ClipboardList,
   ChevronLeft, ChevronUp, ChevronDown, AlertTriangle, History, ArrowDownToLine, 
   ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin, FileUp
 } from 'lucide-react';
