@@ -1,24 +1,23 @@
-# Stage 1: Build (Keep your existing Stage 1)
-FROM node:18-alpine AS build
+# Stage 1: Build the React App
+FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+# We add --legacy-peer-deps to handle any minor version conflicts between React 19 and older plugins
+RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
 
-# Stage 2: Serve (The fix happens here)
-FROM node:18-alpine
+# Stage 2: Serve with Node.js
+FROM node:20-alpine
 WORKDIR /app
 
-# 1. Copy only what we need from build stage
+# Copy production files
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package*.json ./
 
-# 2. IMPORTANT: Install the "Bridge" libraries inside the final container
-# This ensures 'express', 'axios', etc. are available to server.cjs
-RUN npm install --omit=dev express axios pdf-parse multer
+# Install production dependencies only
+RUN npm install --omit=dev express axios multer pdf-parse
 
-# 3. Copy the actual server file
 COPY server.cjs . 
 
 EXPOSE 3000
