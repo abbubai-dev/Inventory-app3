@@ -22,7 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-Dockerfile
 .env
 # Local Netlify folder
 .netlify
