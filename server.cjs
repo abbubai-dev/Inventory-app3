@@ -18,21 +18,18 @@ app.all('/api/proxy', async (req, res) => {
     const response = await axios({
       method: req.method,
       url: GOOGLE_URL,
-      // Pass the body for POST/PUT, and query params for GET
-      data: req.body,
+      // ✅ CHANGE: Stringify the body manually to ensure Google reads it correctly
+      data: req.method === 'POST' ? JSON.stringify(req.body) : null,
       params: req.query,
-      // Force headers to be sent correctly to Google
       headers: {
         'Content-Type': 'application/json',
       },
-      // Important: Google Script uses redirects, axios needs to follow them
       maxRedirects: 5 
     });
     res.json(response.data);
   } catch (error) {
-    // This logs the specific reason Google rejected the request
-    console.error("Proxy Error Details:", error.response?.data || error.message);
-    res.status(error.response?.status || 502).json({ error: "Google Script rejected the request" });
+    console.error("Proxy Error:", error.message);
+    res.status(502).json({ error: "Connection to Google failed" });
   }
 });
 
