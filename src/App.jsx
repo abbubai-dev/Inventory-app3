@@ -392,6 +392,68 @@ const WarehouseDashboard = ({ user, logout }) => {
 const AdminDashboard = ({ user, logout }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  // --- Inside AdminDashboard ---
+const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [] });
+const [reportLoading, setReportLoading] = useState(false);
+const [activeTab, setActiveTab] = useState('users'); // To switch between User Management and Reports
+
+const fetchGlobalHistory = async () => {
+  setReportLoading(true);
+  try {
+    const res = await fetch(`${API_URL}?action=getHistory&location=ALL`);
+    const data = await res.json();
+    setAdminHistory(data);
+  } catch (err) {
+    console.error("Failed to fetch reports", err);
+  } finally {
+    setReportLoading(false);
+  }
+};
+
+const exportAdminPDF = (type) => {
+  const doc = new jsPDF();
+  const data = type === 'in' ? adminHistory.transfers : adminHistory.usage;
+  const title = type === 'in' ? "Global Incoming Stock Report" : "Global Usage Report";
+
+  if (!data || data.length === 0) return alert("No data available to export.");
+
+  // Page 1: Transaction Details
+  doc.setFontSize(18);
+  doc.text(title, 14, 20);
+  
+  const headers = type === 'in' 
+    ? [["Date", "ID", "From", "To", "Status"]] 
+    : [["Date", "Location", "Item Name", "Qty"]];
+
+  const rows = data.map(item => type === 'in'
+    ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.To, item.Status]
+    : [new Date(item.Timestamp).toLocaleDateString(), item.Location, item.Item_Name, item.Qty]
+  );
+
+  doc.autoTable({ head: headers, body: rows, startY: 30 });
+
+  // Page 2: Summary (The "Summary Button" logic)
+  doc.addPage();
+  doc.text("Inventory Consumption Summary", 14, 20);
+  
+  // Logic to calculate totals across all clinics
+  const summaryMap = data.reduce((acc, curr) => {
+    const key = curr.Item_Name || "Transfers";
+    acc[key] = (acc[key] || 0) + (Number(curr.Qty) || 1);
+    return acc;
+  }, {});
+
+  const summaryRows = Object.entries(summaryMap).map(([name, total]) => [name, total]);
+
+  doc.autoTable({
+    head: [["Item Name / Category", "Total Volume"]],
+    body: summaryRows,
+    startY: 30,
+    headStyles: { fillColor: [37, 99, 235] }
+  });
+
+  doc.save(`Admin_Global_Report_${new Date().toLocaleDateString()}.pdf`);
+};
 
   useEffect(() => {
     fetch(`${API_URL}?action=getLoginData`)
@@ -424,54 +486,73 @@ const AdminDashboard = ({ user, logout }) => {
       <div className="w-64 bg-slate-900 text-white p-6">
         <h2 className="text-xl font-bold mb-8 flex items-center gap-2"><ShieldCheck/> Admin</h2>
         <nav className="space-y-4">
-          <div className="p-3 bg-blue-600 rounded-lg flex items-center gap-2 cursor-pointer"><Users size={20}/> User Management</div>
-          <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white w-full"><LogOut size={20}/> Logout</button>
+          {/* User Management Tab */}
+          <div 
+            onClick={() => setActiveTab('users')}
+            className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+            >
+            <Users size={20}/> User Management
+          </div>
+
+          {/* Reports Tab - NEW */}
+          <div 
+            onClick={() => { setActiveTab('reports'); fetchGlobalHistory(); }}
+            className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+            >
+            <FileText size={20}/> System Reports
+          </div>
+
+          <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white w-full mt-8 border-t border-slate-800 pt-8">
+            <LogOut size={20}/> Logout
+          </button>
         </nav>
       </div>
 
-      <div className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-8">User Management</h1>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* Add User Form */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border">
-            <h3 className="font-bold mb-4">Add New User</h3>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <input name="username" placeholder="Full Name / Username" className="w-full p-3 border rounded-xl" required />
-              <input name="password" type="password" placeholder="Password" className="w-full p-3 border rounded-xl" required />
-              {/* NEW: Email Field */}
-              <input name="email" type="email" placeholder="Staff Email (for notifications)" className="w-full p-3 border rounded-xl" required />
-              <div className="grid grid-cols-2 gap-4">
-                <select name="role" className="p-3 border rounded-xl">
-                  <option>Clinic</option>
-                </select>
-                <select name="location" className="p-3 border rounded-xl">
-                  {["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l}>{l}</option>)}
-                </select>
-              </div>
-              <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">
-                {loading ? "Adding..." : "Register User"}
-              </button>
-            </form>
-          </div>
-
-          {/* User List */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border">
-            <h3 className="font-bold mb-4">Current Users</h3>
-            <div className="space-y-2 max-h-100 overflow-y-auto">
-              {users.map((u, i) => (
-                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div>
-                    <p className="font-bold text-sm">{u.username}</p>
-                    <p className="text-[10px] text-slate-500 uppercase">{u.role} • {u.location}</p>
-                  </div>
-                  <div className="text-slate-300">ID: {i+1}</div>
-                </div>
-              ))}
+      <div className="flex-1 p-8 overflow-y-auto">
+        {/* VIEW 1: USER MANAGEMENT */}
+        {activeTab === 'users' && (
+          <div className="animate-in fade-in duration-500">
+            <h1 className="text-2xl font-bold mb-8 text-slate-800">User Management</h1>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* ... Keep your Add User Form & User List here ... */}
             </div>
           </div>
-        </div>
+        )}
+
+        {/* VIEW 2: SYSTEM REPORTS - NEW */}
+        {activeTab === 'reports' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-800">System Reports</h1>
+                <p className="text-slate-400 text-sm">Download aggregated data across all clinics</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => exportAdminPDF('in')} 
+                  className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition"
+                  >
+                  <Download size={18}/> Incoming Report
+                </button>
+                <button 
+                  onClick={() => exportAdminPDF('out')} 
+                  className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition"
+                  >
+                  <Download size={18}/> Usage Report
+                </button>
+              </div>
+            </div>
+
+            {/* Optional: Add a simple data preview table here */}
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center py-20">
+              <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="text-slate-300" size={32} />
+              </div>
+              <h3 className="font-bold text-slate-800">Reports are ready</h3>
+              <p className="text-slate-400 text-sm max-w-xs mx-auto">Click the buttons above to generate a PDF with full summaries and transaction logs.</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -502,9 +583,55 @@ const ClinicDashboard = ({ user, logout }) => {
   const [endDate, setEndDate] = useState("");
   const [expandedMonths, setExpandedMonths] = useState({});
   const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [hasAlerted, setHasAlerted] = useState(false); // ✅ Prevents modal from popping up repeatedly
 
   const locKey = user.location;
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
+
+  // Function to check and trigger alert
+  const checkLowStock = (data) => {
+    if (hasAlerted) return;
+    const lowItems = data.filter(i => {
+      const stock = Number(i[locKey]) || 0;
+      const min = Number(i.MinStock) || 0;
+      return min > 0 && stock < min;
+    });
+    if (lowItems.length > 0) {
+      setTimeout(() => setShowLowStockModal(true), 1000);
+      setHasAlerted(true);
+    }
+  };
+
+  const refreshData = () => {
+    setLoading(true);
+    // If we are in 'history' view, we fetch logs. Otherwise, we fetch inventory.
+    const fetchPath = view === 'history' 
+      ? `${API_URL}?action=getHistory&location=${locKey}`
+      : `${API_URL}?action=getInventory`;
+
+    fetch(fetchPath)
+      .then(r => r.json())
+      .then(data => {
+        if (view === 'history') {
+          setHistory(data);
+        } else {
+          setInventory(data);
+          checkLowStock(data); // ✅ Check for low stock immediately after load
+        }
+      })
+      .catch(err => console.error("Error fetching data:", err))
+      .finally(() => setLoading(false));
+  };
+
+  // ✅ Trigger refresh on 'menu' so inventory loads for the alert
+  useEffect(() => {
+    setSearchTerm("");
+    setSelectedTxn(null);
+    setTxnId(null);
+    if (['menu', 'stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
+      refreshData();
+    }
+  }, [view]);
 
   // ✅ FIX 1: Move getFilteredData to the top level so PDF export can see it
   const getFilteredData = () => {
@@ -583,32 +710,7 @@ const ClinicDashboard = ({ user, logout }) => {
 
     doc.save(`${histTab}_Report_${user.location}.pdf`);
   };
-
-  const refreshData = () => {
-    setLoading(true);
-    const fetchPath = view === 'history' 
-      ? `${API_URL}?action=getHistory&location=${locKey}`
-      : `${API_URL}?action=getInventory`;
-
-    fetch(fetchPath)
-      .then(r => r.json())
-      .then(data => {
-        if (view === 'history') setHistory(data);
-        else setInventory(data);
-      })
-      .catch(err => console.error("Error:", err))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    setSearchTerm("");
-    setSelectedTxn(null);
-    setTxnId(null);
-    if (['stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
-      refreshData();
-    }
-  }, [view]);
-
+  
   useEffect(() => {
     if (view === 'scanner') {
       const s = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
@@ -616,23 +718,6 @@ const ClinicDashboard = ({ user, logout }) => {
       return () => s.clear().catch(()=>{});
     }
   }, [view]);
-
-  // Add this useEffect to trigger the modal automatically
-  useEffect(() => {
-  // Only check if inventory has data
-  if (inventory && inventory.length > 0) {
-    const hasLowStock = inventory.some(item => {
-      const currentStock = Number(item[locKey]) || 0;
-      const minStock = Number(item.MinStock) || 0;
-      return currentStock < minStock;
-    });
-
-    if (hasLowStock) {
-      // Small delay ensures the UI is ready to animate the modal
-      setTimeout(() => setShowLowStockModal(true), 500);
-    }
-  }
-  }, [inventory, locKey]); // This triggers whenever inventory data arrives
 
   const handleReceive = async (txnId) => {
     const recipientName = user.name; 
@@ -841,22 +926,42 @@ const ClinicDashboard = ({ user, logout }) => {
           <>
             {view === 'scanner' && (
               <div className="space-y-4">
-                 <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
-                    <div id="reader"></div>
-                    <div className="mt-4 pt-4 border-t border-dashed">
-                       <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">Or Manual Transaction Entry</p>
-                       <form onSubmit={(e) => {
-                          e.preventDefault();
-                          const val = e.target.txn.value.toUpperCase().trim();
-                          if(val) handleReceive(val);
-                       }} className="flex gap-2">
-                          <input name="txn" placeholder="TXN-XXXXXX" className="flex-1 p-3 border rounded-xl font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500 uppercase" required />
-                          <button type="submit" disabled={actionLoading} className="bg-blue-600 text-white px-4 rounded-xl font-bold min-w-25 flex items-center justify-center">
-                            {actionLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "Confirm"}
-                          </button>
-                       </form>
-                    </div>
-                 </div>
+                <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
+                  <div id="reader"></div>
+      
+                  <div className="mt-6 pt-6 border-t border-dashed border-slate-200">
+                    <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">
+                      Option 2: Digital Receipt
+                    </p>
+        
+                    {/* THE NEW UPLOAD BOX */}
+                    <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 rounded-3xl cursor-pointer hover:bg-blue-50/50 hover:border-blue-300 transition-all group">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
+                        {uploadingPDF ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-xs font-bold text-blue-600">Reading KEW.PS-8...</p>
+                          </div>
+                          ) : (
+                          <>
+                            <div className="p-3 bg-slate-100 rounded-2xl mb-3 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                              <FileUp size={24} />
+                            </div>
+                            <p className="text-xs font-bold text-slate-700">Upload KEW.PS-8 PDF</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Automatic item & quantity detection</p>
+                          </>
+                        )}
+                      </div>
+                      <input 
+                        type="file" 
+                        accept="application/pdf" 
+                        className="hidden" 
+                        onChange={handlePDFUpload} 
+                        disabled={uploadingPDF} 
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1041,327 +1146,104 @@ const ClinicDashboard = ({ user, logout }) => {
           ))}
 
           {view === 'history' && (
-            <div className="space-y-4">
+  <div className="space-y-4 animate-in fade-in duration-500">
+    {/* 1. Tab Switcher */}
+    <div className="flex bg-slate-200 p-1 rounded-xl">
+      <button onClick={() => setHistTab('in')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'in' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Incoming</button>
+      <button onClick={() => setHistTab('out')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${histTab === 'out' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>Usage</button>
+    </div>
 
-            {/* ---------- HELPERS ---------- */}
-            {/*
-                Timezone-safe date formatter
-                  Returns YYYY-MM-DD
-            */}
-            {(() => {})()}
-    
-            {/* Tab Switcher */}
-              <div className="flex bg-slate-200 p-1 rounded-xl">
-                <button
-                  onClick={() => setHistTab('in')}
-                 className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                  histTab === 'in'
-                  ? 'bg-white shadow text-blue-600'
-                  : 'text-slate-500'
-                  }`}
-                  >
-                  Incoming
-                </button>
-                <button
-                  onClick={() => setHistTab('out')}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
-                  histTab === 'out'
-                  ? 'bg-white shadow text-blue-600'
-                  : 'text-slate-500'
-                  }`}
-                  >
-                  Usage
-                </button>
-              </div>
+    {/* 2. Date Filters */}
+    <div className="bg-white p-4 rounded-xl border shadow-sm grid grid-cols-2 gap-2">
+      <div className="col-span-2 flex justify-between mb-1">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter Period</span>
+        {(startDate || endDate) && <button onClick={() => {setStartDate(''); setEndDate('');}} className="text-[10px] text-red-500 font-bold">Reset</button>}
+      </div>
+      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="text-xs p-2 border rounded-lg bg-slate-50" />
+      <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="text-xs p-2 border rounded-lg bg-slate-50" />
+    </div>
 
-              {/* ---------- DATE FILTER & PDF ---------- */}
-              <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Filter & Export
-                  </h3>
-                  {(startDate || endDate) && (
-                  <button
-                    onClick={() => {
-                      setStartDate('');
-                      setEndDate('');
-                    }}
-                    className="text-[10px] text-red-500 font-bold"
-                    >
-                    Reset
-                  </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-[9px] text-slate-400 ml-1">Start Date</p>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-                      />
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-slate-400 ml-1">End Date</p>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full text-xs p-2 border rounded-lg bg-slate-50"
-                      />
-                  </div>
-                </div>
-              </div>
-
-    {/* ---------- GROUPED HISTORY ---------- */}
-    <div className="space-y-6">
+    {/* 3. The Data List */}
+    <div className="space-y-4">
       {(() => {
-        const toLocalDate = (date) =>
-          new Date(date).toLocaleDateString('en-GB');
-
-        const raw =
-          histTab === 'in'
-            ? history.transfers || []
-            : history.usage || [];
-
-        const filtered = raw.filter((item) => {
-          const d = new Date(item.CreatedAt || item.Timestamp).toISOString().split('T')[0];
-          return (!startDate || d >= startDate) && (!endDate || d <= endDate);
+        // Safety check: ensure we have an array to work with
+        const rawData = histTab === 'in' ? (history.transfers || []) : (history.usage || []);
+        
+        // Filter logic
+        const filtered = rawData.filter(item => {
+          const rawDate = item.CreatedAt || item.Timestamp;
+          if (!rawDate) return false;
+          const itemDate = new Date(rawDate).toISOString().split('T')[0];
+          return (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
         });
 
-        if (!filtered.length) {
-          return (
-            <p className="text-center text-slate-400 text-xs py-10">
-              No records found for this period.
+        if (loading) return <div className="py-10 text-center text-slate-400 text-xs font-bold animate-pulse">Fetching records...</div>;
+        if (filtered.length === 0) return <p className="text-center text-slate-400 text-xs py-10">No records found for this period.</p>;
+
+        return filtered.map((item, idx) => (
+          <div key={idx} className="p-4 bg-white border rounded-2xl shadow-sm border-slate-100">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-bold text-blue-600">
+                {new Date(item.CreatedAt || item.Timestamp).toLocaleDateString('en-GB')}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-500'}`}>
+                {item.Status || "Usage Logged"}
+              </span>
+            </div>
+            <p className="text-sm font-bold text-slate-800">{item.Item_Name || item.TransactionID}</p>
+            <p className="text-xs text-slate-500 font-medium">
+              {item.Qty ? `Quantity: ${item.Qty}` : `Source: ${item.From}`} • {item.User || 'Staff'}
             </p>
-          );
-        }
-
-        const grouped = filtered.reduce((acc, item) => {
-          const date = new Date(item.CreatedAt || item.Timestamp);
-          const key = date.toLocaleString('default', {
-            month: 'long',
-            year: 'numeric',
-          });
-          acc[key] = acc[key] || [];
-          acc[key].push(item);
-          return acc;
-        }, {});
-
-        const sortedMonths = Object.keys(grouped).sort(
-          (a, b) =>
-            Math.max(
-              ...grouped[b].map((i) =>
-                new Date(i.CreatedAt || i.Timestamp)
-              )
-            ) -
-            Math.max(
-              ...grouped[a].map((i) =>
-                new Date(i.CreatedAt || i.Timestamp)
-              )
-            )
-        );
-
-        return sortedMonths.map((month) => {
-          const isExpanded = expandedMonths[month] ?? true;
-
-          return (
-            <div key={month} className="border-b pb-2">
-              <button
-                onClick={() =>
-                  setExpandedMonths((p) => ({
-                    ...p,
-                    [month]: !isExpanded,
-                  }))
-                }
-                className="w-full flex justify-between py-3"
-              >
-                <span className="text-[11px] font-black text-slate-500">
-                  {month}
-                </span>
-                <span className="text-[10px] font-black bg-slate-100 px-2 rounded-full">
-                  {grouped[month].length}
-                </span>
-              </button>
-
-              {isExpanded && (
-                <div className="space-y-3 mt-2">
-                  {(() => {
-                  // 1. If we are looking at INCOMING, show the simple ID cards
-                  if (histTab === 'in') {
-                    return grouped[month].map((item) => (
-                    <div
-                      key={`${item.TransactionID}-${item.CreatedAt}`}
-                      onClick={() => setSelectedTxn(item)}
-                      className="p-4 bg-white border rounded-2xl cursor-pointer hover:border-blue-300 transition shadow-sm"
-                      >
-                      <div className="flex justify-between items-center">
-                        <b className="text-slate-700">{item.TransactionID}</b>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.Status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                          {item.Status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        {new Date(item.CreatedAt).toLocaleDateString('en-GB')} • From: {item.From}
-                      </p>
-                    </div>
-                    ));
-                    } 
-
-                    // 2. If we are looking at USAGE, group items by TIMESTAMP
-                    else {const usageByTimestamp = grouped[month].reduce((acc, item) => {
-    const d = new Date(item.Timestamp);
-
-    // ✅ RECOMMENDED CHANGE: Use YYYY-MM-DD for the key so sorting works perfectly
-    const sortKey = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-
-    // ✅ For the UI: Create a pretty version for the staff to read
-    const displayTime = `${d.toLocaleDateString('en-GB')} ${d.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`;
-
-    if (!acc[sortKey]) acc[sortKey] = { display: displayTime, items: [] };
-    acc[sortKey].items.push(item);
-    return acc;
-  }, {});
-
-  // Now we turn that group into the UI cards
-  return Object.entries(usageByTimestamp)
-    .sort((a, b) => b[0].localeCompare(a[0])) // Sorts YYYY-MM-DD strings correctly (Newest First)
-    .map(([sortKey, data], tIdx) => {
-      // Nest items by user
-      const itemsByUser = data.items.reduce((acc, item) => {
-        const user = item.User || 'Staff';
-        if (!acc[user]) acc[user] = [];
-        acc[user].push(item);
-        return acc;
-      }, {});
-
-      return (
-        <div key={tIdx} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm">
-          <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-2">
-            <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">
-              {data.display} {/* Use the pretty display time here */}
-            </span>
           </div>
-          
-          <div className="space-y-2">
-            {Object.entries(itemsByUser).map(([user, userItems], uIdx) => (
-              <div key={uIdx}>
-                <div className="text-[10px] font-black text-blue-600 uppercase tracking-tight mb-1">
-                  {user}
-                </div>
-                <div className="space-y-1">
-                  {userItems.map((item, iIdx) => (
-                    <div key={iIdx} className="flex justify-between text-xs">
-                      <span className="text-slate-600">{item.Item_Name}</span>
-                      <span className="font-bold text-slate-800">x{item.Qty}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    });
-                      }
-                    })()}
-                  </div>
-              )}
-            </div>
-            );
-          });
-        })()}
-      </div>
-
-    {/* ---------- MODAL ---------- */}
-    {selectedTxn && (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-        <div className="bg-white rounded-xl p-6 w-full max-w-sm">
-          <h3 className="font-bold">{selectedTxn.TransactionID}</h3>
-
-          {(() => {
-            let items = [];
-            try {
-              items = JSON.parse(selectedTxn.ItemsJSON || '[]');
-            } catch {
-              items = [];
-            }
-            return items.map((i, idx) => (
-              <div key={idx} className="flex justify-between">
-                <span>{i.name}</span>
-                <span>x{i.qty}</span>
-              </div>
-            ));
-          })()}
-
-          <button
-            onClick={() => setSelectedTxn(null)}
-            className="mt-4 w-full bg-slate-800 text-slate-400 py-2 rounded">
-            Close
-          </button>
-        </div>
-      </div>
-    )}
-
-    {/* --- LOW STOCK ALERT MODAL --- */}
-{showLowStockModal && (
-  <div className="fixed inset-0 bg-black/60 z-100 flex items-center justify-center p-4 backdrop-blur-md">
-    <div className="bg-white w-full max-w-sm rounded-4xl p-6 shadow-2xl animate-in fade-in zoom-in duration-300">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-3 text-red-600">
-          <div className="p-2 bg-red-100 rounded-lg">
-            <AlertTriangle size={24} />
-          </div>
-          <h3 className="font-extrabold text-xl tracking-tight">Stock Alerts</h3>
-        </div>
-        <button 
-          onClick={() => setShowLowStockModal(false)} 
-          className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
-
-      <div className="max-h-80 overflow-y-auto space-y-3 mb-6 pr-1 custom-scrollbar">
-        {inventory
-          .filter(item => (Number(item[locKey]) || 0) < (Number(item.MinStock) || 0))
-          .sort((a, b) => (Number(a[locKey]) || 0) - (Number(b[locKey]) || 0))
-          .map((item, idx) => (
-            <div key={idx} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100">
-              <div className="flex-1 pr-2">
-                <p className="text-sm font-bold text-slate-900 leading-tight">{item.Item_Name}</p>
-                <p className="text-[11px] text-red-500 font-semibold mt-1">
-                  Threshold: {item.MinStock} units
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-black text-red-600 leading-none">{item[locKey] || 0}</p>
-                <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">Left</p>
-              </div>
-            </div>
-          ))}
-      </div>
-
-      <button 
-        onClick={() => { setShowLowStockModal(false); setView('restock'); }}
-        className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
-      >
-        <Plus size={18} /> Request Restock Now
-      </button>
+        ));
+      })()}
     </div>
-  </div>
-)}
   </div>
 )}
 
           </>
         )}
+      
       </main>
+      {/* --- LOW STOCK ALERT MODAL (PLACED OUTSIDE VIEWS) --- */}
+      {showLowStockModal && (
+        <div className="fixed inset-0 bg-black/60 z-9999 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-white w-full max-w-sm rounded-4xl p-6 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3 text-red-600">
+                <AlertTriangle size={24} />
+                <h3 className="font-extrabold text-xl">Stock Alerts</h3>
+              </div>
+              <button onClick={() => setShowLowStockModal(false)} className="p-2 bg-slate-100 rounded-full text-slate-500">✕</button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-3 mb-6 pr-1">
+              {inventory
+                .filter(item => (Number(item[locKey]) || 0) < (Number(item.MinStock) || 0) && Number(item.MinStock) > 0)
+                .map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100">
+                    <div className="flex-1 pr-2">
+                      <p className="text-sm font-bold text-slate-900 leading-tight">{item.Item_Name}</p>
+                      <p className="text-[11px] text-red-500 font-semibold mt-1">Min: {item.MinStock} units</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-black text-red-600">{item[locKey] || 0}</p>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold">Left</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            <button 
+              onClick={() => { setShowLowStockModal(false); setView('restock'); }}
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2"
+            >
+              <Plus size={18} /> View Restock List
+            </button>
+          </div>
+        </div>
+      )}  
+
     </div>
   );
 };
