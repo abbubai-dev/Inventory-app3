@@ -22,7 +22,6 @@ app.all('/api/proxy', async (req, res) => {
       maxRedirects: 5,
       // Logic for POST data
       data: req.method === 'POST' ? req.body : null,
-      headers: { 'Content-Type': 'application/json' } 
     };
 
     const response = await axios(config);
