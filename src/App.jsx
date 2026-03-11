@@ -855,7 +855,7 @@ useEffect(() => {
     try {
       const response = await fetch(API_URL, { 
         method: 'POST', 
-        // Do NOT add Content-Type: application/json (Google Apps Script doesn't like it)
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'recordUsage', 
           location: String(user.location).trim(), // Match sheet header exactly
@@ -899,7 +899,8 @@ useEffect(() => {
 
     try {
       const res = await fetch(API_URL, { 
-        method: 'POST', 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ 
           action: 'checkout', // Matches your GAS if(action === "checkout")
           from: String(user.location).trim(), 
