@@ -465,7 +465,7 @@ const AdminDashboard = ({ user, logout }) => {
       const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('en-GB') : "N/A";
       
       return type === 'in' 
-        ? [formattedDate, item.TransferID, item.From, item.To, item.Status]
+        ? [formattedDate, item.txnID, item.From, item.To, item.Status]
         : [formattedDate, item.Location, item.Item_Name, item.Qty];
     });
 
@@ -728,7 +728,7 @@ const ClinicDashboard = ({ user, logout }) => {
       : [["Date", "Item Name", "Qty", "User"]];
 
     const tableRows = dataToExport.map(item => histTab === 'in' 
-      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransferID, item.From, item.Status]
+      ? [new Date(item.CreatedAt).toLocaleDateString(), item.txnID, item.From, item.Status]
       : [new Date(item.Timestamp).toLocaleDateString(), item.Item_Name, item.Qty, item.User || 'Staff']
     );
 
@@ -1473,7 +1473,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
                       >
                         <div className="flex-1 pr-4">
                           <p className="text-slate-700 font-bold text-xs leading-tight">
-                            {it.Item_Name || it.ItemName || it.TransferID || `TXN: ${it.Transfer_ID}`}
+                            {it.Item_Name || it.ItemName || it.txnID || `TXN: ${it.Transfer_ID}`}
                           </p>
                           {histTab === 'in' && (
                             <div className="flex items-center gap-2 mt-1">
@@ -1506,7 +1506,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
           <div className="flex justify-between items-center mb-8">
             <div>
               <h3 className="font-black text-slate-900 text-xl tracking-tighter">Package Details</h3>
-              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Ref: {selectedTxn.TransferID}</p>
+              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Ref: {selectedTxn.txnID}</p>
             </div>
             <button onClick={() => setSelectedTxn(null)} className="p-3 bg-slate-100 rounded-full text-slate-500 active:bg-slate-200">
               <LogOut size={20} className="rotate-180" />
