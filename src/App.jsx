@@ -840,102 +840,114 @@ useEffect(() => {
   };
 
   const handleUsageSubmit = async () => {
-  if (cart.length === 0) return;
-  if (!confirm("Deduct usage from your shelf?")) return;
-  setActionLoading(true);
+    if (cart.length === 0) return;
+    if (!confirm("Deduct usage from your shelf?")) return;
   
-  // SANITIZE DATA: Ensure code is string and quantity is number
-  const sanitizedCart = cart.map(item => ({
-    name: item.name,
-    code: String(item.code || item.Code).trim(), // Force to string
-    qty: Number(item.qty)
-  }));
+    setActionLoading(true);
+  
+    // ✅ SANITIZATION: Force types to match GAS requirements
+    const sanitizedCart = cart.map(item => ({
+      name: String(item.name || "").trim(),
+      code: String(item.code || item.Code || "").trim(), // Force code to String
+      qty: Number(item.qty) || 0
+    }));
 
-  try {
-    const response = await fetch(API_URL, { 
-      method: 'POST', 
-      body: JSON.stringify({ 
-        action: 'recordUsage', 
-        location: locKey, 
-        cart: sanitizedCart, // Use the sanitized version
-        user: user.name 
-      }) 
-    });
+    try {
+      const response = await fetch(API_URL, { 
+        method: 'POST', 
+        // Do NOT add Content-Type: application/json (Google Apps Script doesn't like it)
+        body: JSON.stringify({ 
+          action: 'recordUsage', 
+          location: String(user.location).trim(), // Match sheet header exactly
+          cart: sanitizedCart,
+          user: String(user.name).trim()
+        }) 
+      });
+
       const result = await response.json();
       if (result.status === 'success') {
         setCart([]); 
         setStatus({msg: 'Stock Deducted'});
-        setTimeout(() => { setView('menu'); setStatus(null); refreshData(); }, 2000);
+        setTimeout(() => { 
+          setView('menu'); 
+          setStatus(null); 
+          refreshData(); 
+        }, 2000);
+      } else {
+        alert("Error: " + (result.message || "Failed to deduct stock. Check GAS Logs."));
       }
     } catch (error) {
-      alert("Error recording usage.");
+      console.error("Usage Submit Error:", error);
+      alert("System error connecting to Google Sheets.");
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleClinicTransfer = async () => {
-  if (!targetLoc) return alert("Select destination clinic");
-  if (cart.length === 0) return;
-  setActionLoading(true);
+    if (!targetLoc) return alert("Please select a destination clinic.");
+    if (cart.length === 0) return alert("Your transfer cart is empty.");
+  
+    setActionLoading(true);
 
-  // SANITIZE DATA
-  const sanitizedCart = cart.map(item => ({
-    name: item.name,
-    code: String(item.code || item.Code).trim(),
-    qty: Number(item.qty)
-  }));
+    // ✅ SANITIZATION: Ensure data types are consistent
+    const sanitizedCart = cart.map(item => ({
+      name: String(item.name || "").trim(),
+      code: String(item.code || item.Code || "").trim(),
+      qty: Number(item.qty) || 0
+    }));
 
-  try {
-    const res = await fetch(API_URL, { 
-      method: 'POST', 
-      body: JSON.stringify({ 
-        action: 'checkout', // ✅ MUST be 'checkout' for transfers
-        from: user.location, 
-        to: targetLoc, 
-        cart: sanitizedCart 
-      }) 
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+          action: 'checkout', // Matches your GAS if(action === "checkout")
+          from: String(user.location).trim(), 
+          to: String(targetLoc).trim(), 
+          cart: sanitizedCart 
+        }) 
+      });
+
+      const data = await res.json();
     
-    if (data.status === 'success') {
-      setTxnId(data.txnId); // This triggers the QR code display
-      setCart([]);
-      setStatus({msg: 'Transfer Initiated'});
-      refreshData();
-      // Don't automatically switch view so the user can see/save the QR code
-    } else {
-      alert("Transfer failed: " + (data.message || "Unknown error"));
+      if (data.status === 'success') {
+        setTxnId(data.txnId); // Display the QR Code
+        setCart([]);
+        setStatus({msg: 'Transfer Initiated'});
+        refreshData();
+      } else {
+        alert("Transfer failed: " + (data.message || "Action not recognized by server."));
+      }
+    } catch (err) {
+      console.error("Transfer Error:", err);
+      alert("Connection failed. Check your network.");
+    } finally {
+      setActionLoading(false);
     }
-  } catch (err) {
-    alert("Transfer failed. Check connection.");
-  } finally {
-    setActionLoading(false);
-  }
-};
+  };
 
-const handleRefillRequest = async (items) => {
-  setActionLoading(true);
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'refillRequest',
-        location: user.location,
-        items: items.map(i => ({ name: i.Item_Name, stock: i[locKey] }))
-      })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      alert("Refill request sent to STOR via email.");
-      setShowLowStockModal(false);
+  const handleRefillRequest = async (items) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'refillRequest',
+          location: user.location,
+          items: items.map(i => ({ name: i.Item_Name, stock: i[locKey] }))
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert("Refill request sent to STOR via email.");
+        setShowLowStockModal(false);
+      }
+    } catch (err) {
+      alert("Failed to send request.");
+    } finally {
+      setActionLoading(false);
     }
-  } catch (err) {
-    alert("Failed to send request.");
-  } finally {
-    setActionLoading(false);
-  }
-};
+  };
     
 const handlePDFUpload = async (e) => {
   const file = e.target.files[0];
