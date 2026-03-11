@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { 
   Plus, Minus, QrCode, LogOut, Package, Search, FileText, ClipboardList,
-  ChevronLeft, ChevronUp, ChevronDown, AlertTriangle, History, ArrowDownToLine, 
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, AlertTriangle, History, ArrowDownToLine, 
   ArrowUpFromLine, CheckCircle2, Users, ShieldCheck, Download, MapPin, FileUp
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -399,9 +399,14 @@ const AdminDashboard = ({ user, logout }) => {
   const fetchGlobalHistory = async () => {
     setReportLoading(true);
     try {
+      // Ensure API_URL is defined in your scope
       const res = await fetch(`${API_URL}?action=getHistory&location=Admin`);
       const data = await res.json();
-      setAdminHistory(data);
+      // Ensure data has the expected structure
+      setAdminHistory({
+        transfers: data.transfers || [],
+        usage: data.usage || []
+      });
     } catch (err) {
       console.error("Failed to fetch reports", err);
     } finally {
@@ -443,88 +448,129 @@ const AdminDashboard = ({ user, logout }) => {
 
   const exportAdminPDF = (type) => {
     const doc = new jsPDF();
-    const data = type === 'in' ? adminHistory.transfers : adminHistory.usage;
+    const data = type === 'in' ? (adminHistory.transfers || []) : (adminHistory.usage || []);
     const title = type === 'in' ? "Global Incoming Stock Report" : "Global Usage Report";
-    if (!data || data.length === 0) return alert("No data available to export.");
+    
+    if (data.length === 0) return alert("No data available to export.");
 
     doc.setFontSize(18);
     doc.text(title, 14, 20);
-    const headers = type === 'in' ? [["Date", "ID", "From", "To", "Status"]] : [["Date", "Location", "Item Name", "Qty"]];
-    const rows = data.map(item => type === 'in' 
-      ? [new Date(item.CreatedAt).toLocaleDateString(), item.TransactionID, item.From, item.To, item.Status]
-      : [new Date(item.Timestamp).toLocaleDateString(), item.Location, item.Item_Name, item.Qty]
-    );
+
+    const headers = type === 'in' 
+      ? [["Date", "ID", "From", "To", "Status"]] 
+      : [["Date", "Location", "Item Name", "Qty"]];
+
+    const rows = data.map(item => {
+      const dateStr = item.CreatedAt || item.Timestamp;
+      const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('en-GB') : "N/A";
+      
+      return type === 'in' 
+        ? [formattedDate, item.TransactionID, item.From, item.To, item.Status]
+        : [formattedDate, item.Location, item.Item_Name, item.Qty];
+    });
+
     doc.autoTable({ head: headers, body: rows, startY: 30 });
+
+    // Page 2: Summary Logic
     doc.addPage();
-    doc.text("Inventory Summary", 14, 20);
+    doc.setFontSize(16);
+    doc.text("Inventory Consumption Summary", 14, 20);
+    
     const summaryMap = data.reduce((acc, curr) => {
       const key = curr.Item_Name || "Transfers";
-      acc[key] = (acc[key] || 0) + (Number(curr.Qty) || 1);
+      acc[key] = (acc[key] || 0) + (Number(curr.Qty || 1));
       return acc;
     }, {});
+
     const summaryRows = Object.entries(summaryMap).map(([name, total]) => [name, total]);
-    doc.autoTable({ head: [["Item Name", "Total Volume"]], body: summaryRows, startY: 30 });
-    doc.save(`Global_Report_${type}.pdf`);
+
+    doc.autoTable({ 
+      head: [["Item Name / Category", "Total Volume"]], 
+      body: summaryRows, 
+      startY: 30,
+      headStyles: { fillColor: [37, 99, 235] }
+    });
+
+    doc.save(`Global_Report_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <div className="w-64 bg-slate-900 text-white p-6">
-        <h2 className="text-xl font-bold mb-8 flex items-center gap-2"><ShieldCheck/> Admin</h2>
+      {/* Sidebar */}
+      <div className="w-64 bg-slate-900 text-white p-6 shadow-xl">
+        <h2 className="text-xl font-bold mb-8 flex items-center gap-2">
+          <ShieldCheck className="text-blue-400" size={24}/> Admin
+        </h2>
         <nav className="space-y-4">
-          <div onClick={() => setActiveTab('users')} className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+          <div 
+            onClick={() => setActiveTab('users')} 
+            className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}
+          >
             <Users size={20}/> User Management
           </div>
-          <div onClick={() => { setActiveTab('reports'); fetchGlobalHistory(); }} className={`p-3 rounded-lg flex items-center gap-2 cursor-pointer transition ${activeTab === 'reports' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+          <div 
+            onClick={() => { setActiveTab('reports'); fetchGlobalHistory(); }} 
+            className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}
+          >
             <FileText size={20}/> System Reports
           </div>
-          <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white w-full mt-8 border-t border-slate-800 pt-8"><LogOut size={20}/> Logout</button>
+          
+          <div className="pt-8 mt-8 border-t border-slate-800">
+            <button onClick={logout} className="p-3 text-slate-400 flex items-center gap-2 hover:text-white hover:bg-red-500/10 rounded-xl transition-all w-full">
+              <LogOut size={20}/> Logout
+            </button>
+          </div>
         </nav>
       </div>
 
+      {/* Main Content */}
       <div className="flex-1 p-8 overflow-y-auto">
         {activeTab === 'users' && (
           <div className="animate-in fade-in duration-500">
             <h1 className="text-2xl font-bold mb-8 text-slate-800">User Management</h1>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              
               {/* Add User Form */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                <h3 className="font-bold mb-4">Add New User</h3>
+              <div className="bg-white p-8 rounded-4xl shadow-sm border border-slate-100">
+                <h3 className="font-bold mb-6 text-slate-700">Add New System User</h3>
                 <form onSubmit={handleAddUser} className="space-y-4">
-                  <input name="username" placeholder="Username" className="w-full p-3 border rounded-xl" required />
-                  <input name="password" type="password" placeholder="Password" className="w-full p-3 border rounded-xl" required />
-                  <input name="email" type="email" placeholder="Email" className="w-full p-3 border rounded-xl" required />
+                  <input name="username" placeholder="Full Name" className="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                  <input name="password" type="password" placeholder="Password" className="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                  <input name="email" type="email" placeholder="Official Email" className="w-full p-4 bg-slate-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
                   <div className="grid grid-cols-2 gap-4">
-                    <select name="role" className="p-3 border rounded-xl">
+                    <select name="role" className="p-4 bg-slate-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="Clinic">Clinic</option>
                       <option value="STOR">STOR</option>
                       <option value="Admin">Admin</option>
                     </select>
-                    <select name="location" className="p-3 border rounded-xl">
+                    <select name="location" className="p-4 bg-slate-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500">
                       {["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"].map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
                   </div>
-                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">
+                  <button disabled={loading} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">
                     {loading ? "Registering..." : "Register User"}
                   </button>
                 </form>
               </div>
 
               {/* User List */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                <h3 className="font-bold mb-4">Current Users</h3>
-                <div className="space-y-2 max-h-100 overflow-y-auto">
-                  {users.map((u, i) => (
-                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border">
+              <div className="bg-white p-8 rounded-4xl shadow-sm border border-slate-100">
+                <h3 className="font-bold mb-6 text-slate-700">Access Control List</h3>
+                <div className="space-y-3 max-h-112.5 overflow-y-auto pr-2 custom-scrollbar">
+                  {users.length > 0 ? users.map((u, i) => (
+                    <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all">
                       <div>
-                        <p className="font-bold text-sm">{u.username}</p>
-                        <p className="text-[10px] text-slate-500 uppercase">{u.role} • {u.location}</p>
+                        <p className="font-black text-sm text-slate-800">{u.username}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{u.role} • {u.location}</p>
                       </div>
-                      <div className="text-slate-300">#{i + 1}</div>
+                      <div className="bg-white px-3 py-1 rounded-lg text-[10px] font-black text-slate-300 border border-slate-100">ID: {i + 1}</div>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-center text-slate-400 text-sm py-10">No users found.</p>
+                  )}
                 </div>
               </div>
+
             </div>
           </div>
         )}
@@ -537,14 +583,35 @@ const AdminDashboard = ({ user, logout }) => {
                 <p className="text-slate-400 text-sm">Download aggregated data across all clinics</p>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => exportAdminPDF('in')} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Download size={18}/> Incoming Report</button>
-                <button onClick={() => exportAdminPDF('out')} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Download size={18}/> Usage Report</button>
+                <button 
+                  onClick={() => exportAdminPDF('in')} 
+                  disabled={reportLoading}
+                  className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition hover:bg-slate-800"
+                >
+                  <Download size={18}/> {reportLoading ? "Loading..." : "Incoming Report"}
+                </button>
+                <button 
+                  onClick={() => exportAdminPDF('out')} 
+                  disabled={reportLoading}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition hover:bg-blue-700"
+                >
+                  <Download size={18}/> {reportLoading ? "Loading..." : "Usage Report"}
+                </button>
               </div>
             </div>
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center py-20">
-              <FileText className="text-slate-200 mx-auto mb-4" size={48} />
-              <h3 className="font-bold text-slate-800">Reports are ready</h3>
-              <p className="text-slate-400 text-sm">Generate PDFs to see total volumes and logs.</p>
+            
+            <div className="bg-white p-16 rounded-[3rem] border border-dashed border-slate-200 text-center">
+              {reportLoading ? (
+                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              ) : (
+                <FileText className="text-slate-200 mx-auto mb-4" size={64} />
+              )}
+              <h3 className="font-bold text-slate-800 text-lg">
+                {reportLoading ? "Gathering Global Data..." : "Reporting Module Active"}
+              </h3>
+              <p className="text-slate-400 text-sm max-w-xs mx-auto mt-2">
+                Click the buttons above to generate a consolidated PDF of all transactions district-wide.
+              </p>
             </div>
           </div>
         )}
@@ -576,9 +643,10 @@ const ClinicDashboard = ({ user, logout }) => {
   const [targetLoc, setTargetLoc] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [expandedMonths, setExpandedMonths] = useState({});
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [hasAlerted, setHasAlerted] = useState(false); // ✅ Prevents modal from popping up repeatedly
+  const [pdfItems, setPdfItems] = useState(null); // To store items found in PDF
+  const [uploadingPDF, setUploadingPDF] = useState(false);
 
   const locKey = user.location;
   const allLocations = ["STOR", "KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
@@ -837,6 +905,75 @@ const handleRefillRequest = async (items) => {
     setActionLoading(false);
   }
 };
+    
+const handlePDFUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  setUploadingPDF(true);
+  const formData = new FormData();
+  formData.append('invoice', file);
+
+  try {
+    // 1. Send to your Node.js backend (server.cjs)
+    const response = await fetch('/api/process-receipt', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const result = await response.json();
+
+    if (result.success && result.transferred.length > 0) {
+      // ✅ FIX: Instead of window.confirm, we store the data in state.
+      // This makes the "Review PDF Items" modal appear automatically.
+      setPdfItems(result.transferred); 
+    } else {
+      alert("No items detected. Please ensure this is a standard KEW.PS-8 PDF.");
+    }
+  } catch (err) {
+    console.error("PDF Upload Error:", err);
+    alert("Server error processing PDF.");
+  } finally {
+    setUploadingPDF(false);
+    // Clear the input so the user can upload the same file again if they cancel
+    e.target.value = null; 
+  }
+};
+
+const handleManualPDFSubmit = async (itemsToSubmit) => {
+  if (!itemsToSubmit || itemsToSubmit.length === 0) return;
+  
+  setActionLoading(true);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'recordUsage',
+        operation: 'add', // ⬅️ Tells GAS to add stock instead of subtract
+        location: user.location,
+        // Mapping the PDF items to the format GAS expects
+        cart: itemsToSubmit.map(i => ({ 
+          name: i.item, 
+          qty: i.quantity, 
+          code: String(i.item).trim() 
+        })),
+        user: user.name
+      })
+    });
+    
+    const data = await res.json();
+    if (data.status === 'success') {
+      alert("Stock successfully updated from PDF!");
+      setPdfItems(null); // ✅ Clear state to close the modal
+      refreshData();     // Update the inventory numbers on screen
+      setView('menu');   // Go back to the main menu
+    }
+  } catch (err) {
+    alert("Failed to update stock via PDF.");
+  } finally {
+    setActionLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col font-sans">
@@ -966,45 +1103,85 @@ const handleRefillRequest = async (items) => {
           ) : (
           <>
             {view === 'scanner' && (
-              <div className="space-y-4">
-                <div className="bg-white p-4 rounded-3xl shadow-xl border-2 border-blue-500 overflow-hidden">
-                  <div id="reader"></div>
+  <div className="space-y-4 animate-in fade-in duration-500 pb-20">
+    <div className="bg-white p-4 rounded-[2.5rem] shadow-xl border-2 border-blue-500 overflow-hidden">
+      {/* 1. THE QR SCANNER */}
+      <div id="reader" className="overflow-hidden rounded-2xl"></div>
       
-                  <div className="mt-6 pt-6 border-t border-dashed border-slate-200">
-                    <p className="text-center text-[10px] text-slate-400 font-bold uppercase mb-4 tracking-widest">
-                      Option 2: Digital Receipt
-                    </p>
-        
-                    {/* THE NEW UPLOAD BOX */}
-                    <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 rounded-3xl cursor-pointer hover:bg-blue-50/50 hover:border-blue-300 transition-all group">
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
-                        {uploadingPDF ? (
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                            <p className="text-xs font-bold text-blue-600">Reading KEW.PS-8...</p>
-                          </div>
-                          ) : (
-                          <>
-                            <div className="p-3 bg-slate-100 rounded-2xl mb-3 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                              <FileUp size={24} />
-                            </div>
-                            <p className="text-xs font-bold text-slate-700">Upload KEW.PS-8 PDF</p>
-                            <p className="text-[10px] text-slate-400 mt-1">Automatic item & quantity detection</p>
-                          </>
-                        )}
-                      </div>
-                      <input 
-                        type="file" 
-                        accept="application/pdf" 
-                        className="hidden" 
-                        onChange={handlePDFUpload} 
-                        disabled={uploadingPDF} 
-                      />
-                    </label>
-                  </div>
+      <div className="mt-6 space-y-6">
+        {/* DIVIDER 1 */}
+        <div className="relative flex py-2 items-center">
+          <div className="grow border-t border-slate-100"></div>
+          <span className="shrink mx-4 text-[10px] font-black text-slate-300 uppercase">OR</span>
+          <div className="grow border-t border-slate-100"></div>
+        </div>
+
+        {/* 2. MANUAL INPUT */}
+        <div className="space-y-3">
+          <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            Option 2: Manual ID Entry
+          </p>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              placeholder="Enter TXN-XXXXXX"
+              className="flex-1 p-4 bg-slate-50 border-0 rounded-2xl text-sm font-bold uppercase"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleReceive(e.target.value);
+              }}
+              id="manualTxnInput"
+            />
+            <button 
+              onClick={() => handleReceive(document.getElementById('manualTxnInput').value)}
+              className="px-6 bg-slate-900 text-white rounded-2xl font-bold text-xs"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+
+        {/* DIVIDER 2 */}
+        <div className="relative flex py-2 items-center">
+          <div className="grow border-t border-slate-100"></div>
+          <span className="shrink mx-4 text-[10px] font-black text-slate-300 uppercase">OR</span>
+          <div className="grow border-t border-slate-100"></div>
+        </div>
+
+        {/* 3. PDF UPLOAD */}
+        <div className="space-y-3">
+          <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+            Option 3: Digital Receipt (KEW.PS-8)
+          </p>
+          <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 rounded-4xl cursor-pointer hover:bg-blue-50/50 hover:border-blue-300 transition-all group">
+            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+              {uploadingPDF ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs font-bold text-blue-600 uppercase tracking-tighter">Parsing Document...</p>
                 </div>
-              </div>
-            )}
+              ) : (
+                <>
+                  <div className="p-3 bg-slate-100 rounded-2xl mb-3 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                    <FileUp size={24} />
+                  </div>
+                  <p className="text-xs font-bold text-slate-700">Upload KEW.PS-8 PDF</p>
+                  <p className="text-[10px] text-slate-400 mt-1">System will auto-detect items & quantities</p>
+                </>
+              )}
+            </div>
+            <input 
+              type="file" 
+              accept="application/pdf" 
+              className="hidden" 
+              onChange={handlePDFUpload} 
+              disabled={uploadingPDF} 
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
           {view === 'usage' && (
             <div className="space-y-3">
@@ -1437,7 +1614,41 @@ const handleRefillRequest = async (items) => {
           </div>
         </div>
       )}  
+      
+      {/* ✅ THIS IS WHERE pdfItems IS USED */}
+{pdfItems && (
+  <div className="fixed inset-0 bg-black/70 z-10001 flex items-center justify-center p-4 backdrop-blur-md">
+    <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+      <h3 className="font-black text-slate-900 text-lg mb-1">Confirm PDF Data</h3>
+      <p className="text-[10px] text-slate-400 mb-6 font-bold uppercase tracking-widest">Parsed from KEW.PS-8</p>
 
+      <div className="space-y-3 mb-8 max-h-64 overflow-y-auto pr-2">
+        {/* ✅ READING the items from pdfItems here */}
+        {pdfItems.map((item, i) => (
+          <div key={i} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+            <span className="text-xs font-bold text-slate-800 truncate pr-4">{item.item}</span>
+            <span className="text-sm font-black text-blue-600 bg-white px-3 py-1 rounded-xl shadow-sm">x{item.quantity}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-3">
+        <button 
+          onClick={() => setPdfItems(null)} // ✅ RESET: This closes the modal
+          className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold active:scale-95 transition"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={() => handleManualPDFSubmit(pdfItems)} // ✅ PASSING the data to the submission function
+          className="flex-2 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition flex items-center justify-center gap-2"
+        >
+          {actionLoading ? "Updating..." : "Confirm & Add"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };
