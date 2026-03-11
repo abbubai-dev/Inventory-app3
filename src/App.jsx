@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { 
   Plus, Minus, QrCode, LogOut, Package, Search, FileText, ClipboardList,
@@ -24,9 +24,14 @@ const Login = ({ setUser }) => {
   const [otp, setOtp] = useState("");
 
   useEffect(() => {
+    setLoading(true); // Start loading
     fetch(`${API_URL}?action=getLoginData`)
       .then(res => res.json())
-      .then(data => setSetupData(data));
+      .then(data => {
+      setSetupData(data || { locations: [], users: [] });
+      })
+      .catch(err => console.error("Login Setup Error:", err))
+      .finally(() => setLoading(false)); // Stop loading
   }, []);
 
   // STEP 1: Validate Password and Send OTP
@@ -129,7 +134,9 @@ const Login = ({ setUser }) => {
                 required
                 >
                 <option value="" className="text-slate-900">Select Location...</option>
-                {setupData.locations.map(l => <option key={l} value={l} className="text-slate-900">{l}</option>)}
+                { (setupData.locations || []).map(l => (
+                  <option key={l} value={l} className="text-slate-900">{l}</option>
+                ))}
               </select>
             </div>
 
@@ -144,9 +151,12 @@ const Login = ({ setUser }) => {
                 required
                 >
                 <option value="" className='text-slate-900'>Select Staff...</option>
-                {setupData.users.filter(u => u.location === selectedLoc).map(u => (
+                { (setupData.users || [])
+                  .filter(u => u.location === selectedLoc)
+                  .map(u => (
                   <option key={u.username} value={u.username} className="text-slate-900">{u.username}</option>
-                ))}
+                  ))
+                }
               </select>
             </div>
 
@@ -667,34 +677,39 @@ const ClinicDashboard = ({ user, logout }) => {
 
   const refreshData = () => {
     setLoading(true);
-    // If we are in 'history' view, we fetch logs. Otherwise, we fetch inventory.
-    const fetchPath = view === 'history' 
-      ? `${API_URL}?action=getHistory&location=${locKey}`
-      : `${API_URL}?action=getInventory`;
-
     fetch(fetchPath)
       .then(r => r.json())
       .then(data => {
         if (view === 'history') {
-          setHistory(data);
+          // Ensure transfers and usage are arrays
+          setHistory({
+            transfers: Array.isArray(data.transfers) ? data.transfers : [],
+            usage: Array.isArray(data.usage) ? data.usage : []
+          });
         } else {
-          setInventory(data);
-          checkLowStock(data); // ✅ Check for low stock immediately after load
+          // Ensure inventory is an array
+          setInventory(Array.isArray(data) ? data : []);
+          if (Array.isArray(data)) checkLowStock(data);
         }
       })
-      .catch(err => console.error("Error fetching data:", err))
+      .catch(err => {
+        console.error("Fetch failed", err);
+        // Reset to empty states on error to prevent map crashes
+        if (view === 'history') setHistory({ transfers: [], usage: [] });
+        else setInventory([]);
+      })
       .finally(() => setLoading(false));
-  };
+    };
 
-  // ✅ Trigger refresh on 'menu' so inventory loads for the alert
-  useEffect(() => {
-    setSearchTerm("");
-    setSelectedTxn(null);
-    setTxnId(null);
-    if (['menu', 'stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
-      refreshData();
-    }
-  }, [view]);
+    // ✅ Trigger refresh on 'menu' so inventory loads for the alert
+    useEffect(() => {
+      setSearchTerm("");
+      setSelectedTxn(null);
+      setTxnId(null);
+      if (['menu', 'stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
+        refreshData();
+      }
+    }, [view]);
 
   // ✅ FIX 1: Move getFilteredData to the top level so PDF export can see it
   const getFilteredData = () => {
@@ -728,7 +743,7 @@ const ClinicDashboard = ({ user, logout }) => {
       : [["Date", "Item Name", "Qty", "User"]];
 
     const tableRows = dataToExport.map(item => histTab === 'in' 
-      ? [new Date(item.CreatedAt).toLocaleDateString(), item.txnID, item.From, item.Status]
+      ? [new Date(item.CreatedAt || item.Timestamp).toLocaleDateString(), item.TransferID || item.transferID || "N/A", item.From, item.Status]
       : [new Date(item.Timestamp).toLocaleDateString(), item.Item_Name, item.Qty, item.User || 'Staff']
     );
 
@@ -782,27 +797,33 @@ const ClinicDashboard = ({ user, logout }) => {
     }
   }, [view]);
 
-  const handleReceive = async (txnId) => {
-    const recipientName = user.name; 
+  const handleReceive = async (scannedId) => {
+    if (!scannedId) return;
+  
+    const recipientName = user.name;
     setActionLoading(true);
+  
     try {
       const resp = await fetch(API_URL, {
         method: 'POST',
         body: JSON.stringify({
           action: 'confirmReceipt',
-          txnId: txnId,
+          txnId: scannedId.trim(), // We send it as txnId, GAS catches it
           to: user.location,
-          recipient: recipientName 
+          recipient: recipientName
         })
       });
+    
       const result = await resp.json();
       if (result.status === 'success') {
-        alert(`Success! Confirmed by ${recipientName}`);
+        alert(`Stock Received & Verified!`);
         refreshData();
         setView('menu');
+      } else {
+        alert("Error: " + result.message);
       }
     } catch (e) {
-      console.error("Confirmation failed", e);
+      alert("Connection error. Try again.");
     } finally {
       setActionLoading(false);
     }
@@ -1473,7 +1494,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
                       >
                         <div className="flex-1 pr-4">
                           <p className="text-slate-700 font-bold text-xs leading-tight">
-                            {it.Item_Name || it.ItemName || it.txnID || `TXN: ${it.transferID}`}
+                            {it.Item_Name || it.ItemName || it.TransferID || it.transferID || it.txnID || "Unknown Transfer"}
                           </p>
                           {histTab === 'in' && (
                             <div className="flex items-center gap-2 mt-1">
@@ -1506,7 +1527,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
           <div className="flex justify-between items-center mb-8">
             <div>
               <h3 className="font-black text-slate-900 text-xl tracking-tighter">Package Details</h3>
-              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Ref: {selectedTxn.txnID}</p>
+              <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mt-1">Ref: {selectedTxn.TransferID || selectedTxn.transferID || "No ID"}</p>
             </div>
             <button onClick={() => setSelectedTxn(null)} className="p-3 bg-slate-100 rounded-full text-slate-500 active:bg-slate-200">
               <LogOut size={20} className="rotate-180" />
@@ -1519,9 +1540,11 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
               <span>Qty</span>
             </div>
             <div className="space-y-3 max-h-72 overflow-y-auto pr-2 custom-scrollbar">
-              {JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
+              {selectedTxn && JSON.parse(selectedTxn.ItemsJSON || "[]").map((item, i) => (
                 <div key={i} className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-50">
-                  <span className="text-xs text-slate-800 font-bold leading-tight pr-4">{item.name || item.Item_Name}</span>
+                  <span className="text-xs text-slate-800 font-bold leading-tight pr-4">
+                    {item.name || item.ItemName || "Unknown Item"}
+                  </span>
                   <span className="text-sm font-black text-blue-600">x{item.qty || item.Qty}</span>
                 </div>
               ))}
