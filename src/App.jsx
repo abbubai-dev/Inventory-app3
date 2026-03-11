@@ -1473,7 +1473,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
                       >
                         <div className="flex-1 pr-4">
                           <p className="text-slate-700 font-bold text-xs leading-tight">
-                            {it.Item_Name || it.ItemName || it.txnID || `TXN: ${it.Transfer_ID}`}
+                            {it.Item_Name || it.ItemName || it.txnID || `TXN: ${it.transferID}`}
                           </p>
                           {histTab === 'in' && (
                             <div className="flex items-center gap-2 mt-1">
