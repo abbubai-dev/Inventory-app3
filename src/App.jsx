@@ -677,29 +677,39 @@ const ClinicDashboard = ({ user, logout }) => {
 
   const refreshData = () => {
     setLoading(true);
-    fetch(fetchPath)
+
+    // 1. Define fetchPath INSIDE the function so it's fresh every time
+    const fetchPath = view === 'history' 
+    ? `${API_URL}?action=getHistory&location=${locKey}`
+    : `${API_URL}?action=getInventory`;
+
+    fetch(fetchPath) // 2. Now fetchPath is definitely defined here
       .then(r => r.json())
       .then(data => {
-        if (view === 'history') {
-          // Ensure transfers and usage are arrays
-          setHistory({
-            transfers: Array.isArray(data.transfers) ? data.transfers : [],
-            usage: Array.isArray(data.usage) ? data.usage : []
-          });
-        } else {
-          // Ensure inventory is an array
-          setInventory(Array.isArray(data) ? data : []);
-          if (Array.isArray(data)) checkLowStock(data);
-        }
-      })
-      .catch(err => {
-        console.error("Fetch failed", err);
-        // Reset to empty states on error to prevent map crashes
-        if (view === 'history') setHistory({ transfers: [], usage: [] });
-        else setInventory([]);
-      })
-      .finally(() => setLoading(false));
-    };
+      if (view === 'history') {
+        setHistory({
+          transfers: Array.isArray(data.transfers) ? data.transfers : [],
+          usage: Array.isArray(data.usage) ? data.usage : []
+        });
+      } else {
+        setInventory(Array.isArray(data) ? data : []);
+        if (Array.isArray(data)) checkLowStock(data);
+      }
+    })
+    .catch(err => console.error("Error fetching data:", err))
+    .finally(() => setLoading(false));
+};
+
+useEffect(() => {
+  setSearchTerm("");
+  setSelectedTxn(null);
+  setTxnId(null);
+  
+  // 3. Just call the function. Don't try to use fetchPath here.
+  if (['menu', 'stock', 'restock', 'usage', 'history', 'transfer_out'].includes(view)) {
+    refreshData();
+  }
+}, [view]);
 
     // ✅ Trigger refresh on 'menu' so inventory loads for the alert
     useEffect(() => {
