@@ -212,6 +212,7 @@ const WarehouseDashboard = ({ user, logout }) => {
   const [clinics, setClinics] = useState([]);
   const [selectedClinic, setSelectedClinic] = useState("");
   const [clinicInventory, setClinicInventory] = useState([]);
+  const [auditClinicFilter, setAuditClinicFilter] = useState("ALL");
   const [auditLog, setAuditLog] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -269,11 +270,10 @@ const WarehouseDashboard = ({ user, logout }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-20">
-      {/* Header */}
       <header className="bg-white p-6 border-b sticky top-0 z-20 flex justify-between items-center shadow-sm">
         <div>
           <h1 className="text-xl font-black text-slate-900 tracking-tight">STOR CONTROL</h1>
-          <p className="text-[10px] font-bold text-blue-600 uppercase">District View</p>
+          <p className="text-[10px] font-bold text-blue-600 uppercase">District Overseer View</p>
         </div>
         <button onClick={logout} className="p-3 bg-slate-100 rounded-full text-slate-400">
           <LogOut size={20} />
@@ -286,7 +286,7 @@ const WarehouseDashboard = ({ user, logout }) => {
           {['alerts', 'audit'].map((t) => (
             <button
               key={t}
-              onClick={() => setView(t)}
+              onClick={() => { setView(t); setAuditClinicFilter("ALL"); }}
               className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${view === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
             >
               {t.toUpperCase()}
@@ -302,8 +302,8 @@ const WarehouseDashboard = ({ user, logout }) => {
               value={auditClinicFilter}
               onChange={(e) => setAuditClinicFilter(e.target.value)}
               className="w-full mt-2 p-3 bg-slate-50 border-0 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-            >
-              <option value="ALL">显示所有 (ALL CLINICS)</option>
+              >
+              <option value="ALL"> (ALL CLINICS)</option>
               {clinics.map(loc => (
                 <option key={loc} value={loc}>{loc}</option>
               ))}
@@ -344,7 +344,7 @@ const WarehouseDashboard = ({ user, logout }) => {
           </div>
         )}
 
-        {/* --- VIEW: AUDIT (PDF RECEIPTS) --- */}
+        {/* --- VIEW: AUDIT (Filtered PDF RECEIPTS) --- */}
         {view === 'audit' && (
           <div className="space-y-4 animate-in fade-in">
             <div className="flex justify-between items-center px-2">
