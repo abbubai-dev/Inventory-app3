@@ -207,193 +207,201 @@ const Login = ({ setUser }) => {
 
 // --- WAREHOUSE DASHBOARD (STOR) - CLEAN & COMPACT VERSION ---
 const WarehouseDashboard = ({ user, logout }) => {
-  const [inventory, setInventory] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [txnId, setTxnId] = useState(null);
+  const [view, setView] = useState('alerts'); // 'alerts', 'clinic_view', 'audit'
+  const [alerts, setAlerts] = useState([]);
+  const [clinics, setClinics] = useState([]);
+  const [selectedClinic, setSelectedClinic] = useState("");
+  const [clinicInventory, setClinicInventory] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [targetLoc, setTargetLoc] = useState("KPH");
-  const [showAlerts, setShowAlerts] = useState(false);
 
-  const clinics = ["KPH", "KPKK", "KPP", "KPPR", "KPSS", "KPM"];
-
-  useEffect(() => { 
-    fetch(`${API_URL}?action=getInventory`).then(res => res.json()).then(setInventory); 
+  // 1. Initial Data Fetch
+  useEffect(() => {
+    fetchDistrictData();
   }, []);
 
-  const clinicAlerts = (inventory || []).filter(item => 
-    clinics.some(c => (Number(item[c]) || 0) < (item.MinStock || 0))
-  );
+  const fetchDistrictData = async () => {
+    setLoading(true);
+    try {
+      // We'll use getLoginData to get the list of clinic names
+      const loginRes = await fetch(`${API_URL}?action=getLoginData`);
+      const loginData = await loginRes.json();
+      setClinics(loginData.locations || []);
 
-  const addToCart = (item) => {
-    const q = window.prompt(`Quantity for ${item.Item_Name}:`, "1");
-    if (!q || isNaN(q) || q <= 0) return;
-    setCart([...cart, { cartId: Math.random().toString(36).substr(2, 5), code: item.Code, name: item.Item_Name, qty: parseInt(q) }]);
+      // Fetch all inventory to calculate alerts locally (or use the new GAS action)
+      const invRes = await fetch(`${API_URL}?action=getInventory`);
+      const invData = await invRes.json();
+      calculateAlerts(invData, loginData.locations);
+      
+      // Fetch Audit Log (UsageLog entries where type is "Receipt")
+      const histRes = await fetch(`${API_URL}?action=getHistory&location=Admin`);
+      const histData = await histRes.json();
+      // ✅ Updated to check log.Status instead of log.Type
+      const receiptsOnly = (histData.usage || []).filter(log => log.Status === "Receipt");
+      setAuditLog(receiptsOnly);
+
+    } catch (err) {
+      console.error("Audit Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleCheckout = async () => {
-    if (!confirm(`Transfer to ${targetLoc}?`)) return;
-    setLoading(true);
-    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'checkout', from: user.location, to: targetLoc, cart }) });
-    const data = await res.json();
-    setTxnId(data.txnId);
-    setLoading(false);
+  const calculateAlerts = (inventory, locList) => {
+    let lowStock = [];
+    inventory.forEach(item => {
+      locList.forEach(loc => {
+        const stock = Number(item[loc]) || 0;
+        const min = Number(item.MinStock) || 0;
+        if (min > 0 && stock < min) {
+          lowStock.push({ ...item, clinic: loc, current: stock });
+        }
+      });
+    });
+    setAlerts(lowStock);
+  };
+
+  // ✅ IMPROVEMENT: Filtered Audit Log logic
+  const getFilteredAudit = () => {
+    if (auditClinicFilter === "ALL") return auditLog;
+    return auditLog.filter(log => log.Location === auditClinicFilter);
   };
 
   return (
-    <div className="flex h-screen bg-slate-100 font-sans">
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b px-5 py-3 flex justify-between items-center shadow-sm z-10">
-          <div className="flex items-center gap-3">
-            <img src="/logo_PKPDKK.png" alt="Logo" className="h-7 w-auto" />
-            <h1 className="text-sm font-black tracking-tight text-slate-700 uppercase">STOR PKPDKK</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowAlerts(!showAlerts)} 
-              className={`relative p-2 rounded-lg transition-colors ${showAlerts ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-            >
-              <AlertTriangle size={16}/>
-              {clinicAlerts.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 border-2 border-white rounded-full"></span>}
-            </button>
-            <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><LogOut size={16}/></button>
-          </div>
-        </header>
-
-        <div className="p-4 overflow-y-auto flex-1 space-y-4">
-          {/* COMPACT ALERTS BOX */}
-          {showAlerts && clinicAlerts.length > 0 && (
-            <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-3">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-1">
-                   <AlertTriangle size={12}/> Clinic Shortages
-                </span>
-                <button onClick={() => setShowAlerts(false)} className="text-slate-300 hover:text-slate-500">×</button>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                {clinicAlerts.map(item => (
-                   <div key={item.Code} className="min-w-45 bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col justify-between">
-                      <p className="text-[10px] font-bold text-slate-700 truncate mb-1">{item.Item_Name}</p>
-                      <button 
-                        onClick={() => { setTargetLoc(clinics.find(c => (Number(item[c])||0) < item.MinStock)); addToCart(item); }} 
-                        className="w-full py-1 bg-red-600 text-white text-[9px] font-bold rounded uppercase tracking-tighter"
-                      >Fulfill</button>
-                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* COMPACT SEARCH */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input 
-              placeholder="Search category or item..." 
-              className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border-none ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-blue-500 bg-white/80 shadow-sm"
-              onChange={e => setSearchTerm(e.target.value.toLowerCase())} 
-            />
-          </div>
-
-          {/* GROUPED LIST VIEW */}
-          <div className="space-y-3 pb-10">
-            {(() => {
-              const filtered = (inventory || []).filter(i => 
-                i.Item_Name?.toLowerCase().includes(searchTerm) || 
-                i.Category?.toLowerCase().includes(searchTerm) || 
-                i.Code?.toString().includes(searchTerm)
-              );
-
-              // Group by category
-              const groups = filtered.reduce((acc, item) => {
-                const cat = item.Category || "Uncategorized";
-                if (!acc[cat]) acc[cat] = [];
-                acc[cat].push(item);
-                return acc;
-              }, {});
-
-              return Object.entries(groups).sort().map(([category, items]) => (
-                <div key={category} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="bg-slate-50 px-3 py-1.5 border-b border-slate-100 flex justify-between items-center">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{category}</span>
-                    <span className="text-[9px] font-bold text-slate-400">{items.length} items</span>
-                  </div>
-                  <div className="divide-y divide-slate-50">
-                    {items.map(item => {
-                      const stock = Number(item[user.location]) || 0;
-                      return (
-                        <div key={item.Code} className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 transition-colors group">
-                          <div className="flex-1 min-w-0 pr-4">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono font-bold text-slate-400">#{item.Code}</span>
-                              <h3 className="text-xs font-semibold text-slate-700 truncate">{item.Item_Name}</h3>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <span className={`text-xs font-black ${stock <= 0 ? 'text-red-500' : 'text-slate-700'}`}>{stock}</span>
-                              <p className="text-[8px] font-bold text-slate-300 uppercase leading-none">In Stor</p>
-                            </div>
-                            <button 
-                              onClick={() => addToCart(item)} 
-                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Plus size={14}/>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ));
-            })()}
-          </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-20">
+      {/* Header */}
+      <header className="bg-white p-6 border-b sticky top-0 z-20 flex justify-between items-center shadow-sm">
+        <div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">STOR CONTROL</h1>
+          <p className="text-[10px] font-bold text-blue-600 uppercase">District View</p>
         </div>
-      </div>
+        <button onClick={logout} className="p-3 bg-slate-100 rounded-full text-slate-400">
+          <LogOut size={20} />
+        </button>
+      </header>
 
-      {/* COMPACT CART SIDEBAR */}
-      <div className="w-64 bg-white border-l shadow-2xl flex flex-col">
-          <div className="p-3 border-b bg-slate-800 text-white text-xs font-black uppercase tracking-widest">Transfer Cart</div>
-          <div className="p-3 bg-slate-50 border-b">
-            <label className="text-[9px] font-black text-slate-400 block mb-1 uppercase">Destination:</label>
-            <select 
-              value={targetLoc} 
-              onChange={e => setTargetLoc(e.target.value)} 
-              className="w-full border-slate-200 rounded-lg p-1.5 text-xs font-bold bg-white outline-none focus:ring-1 focus:ring-blue-500"
+      <main className="p-4 space-y-4">
+        {/* Navigation Tabs */}
+        <div className="flex bg-slate-200 p-1 rounded-2xl shadow-inner">
+          {['alerts', 'audit'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setView(t)}
+              className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${view === t ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
             >
-              {clinics.map(l => <option key={l}>{l}</option>)}
+              {t.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* --- DYNAMIC FILTER DROPDOWN --- */}
+        {view === 'audit' && (
+          <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm animate-in fade-in duration-300">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Filter Clinic</label>
+            <select 
+              value={auditClinicFilter}
+              onChange={(e) => setAuditClinicFilter(e.target.value)}
+              className="w-full mt-2 p-3 bg-slate-50 border-0 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            >
+              <option value="ALL">显示所有 (ALL CLINICS)</option>
+              {clinics.map(loc => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
             </select>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1">
-            {cart.map(c => (
-              <div key={c.cartId} className="text-[10px] p-2 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center group">
-                <span className="truncate pr-2 font-medium">{c.name}</span>
-                <div className="flex items-center gap-2">
-                  <b className="text-blue-600">x{c.qty}</b>
-                  <button onClick={()=>setCart(cart.filter(x=>x.cartId!==c.cartId))} className="text-slate-300 hover:text-red-500">×</button>
-                </div>
-              </div>
-            ))}
-            {cart.length === 0 && <p className="text-[10px] text-center text-slate-400 mt-10 italic">Cart is empty</p>}
-          </div>
-          <div className="p-3 border-t bg-slate-50">
-            {txnId ? (
-              <div className="text-center p-2 bg-white rounded-xl border shadow-inner">
-                <QRCodeCanvas value={txnId} size={110} className="mx-auto" />
-                <p className="mt-2 font-mono text-[10px] font-bold text-blue-600">{txnId}</p>
-                <button onClick={()=>{setTxnId(null); setCart([]);}} className="text-[9px] font-black uppercase text-slate-400 mt-2 block w-full hover:text-slate-600">Clear</button>
+        )}
+
+        {/* --- VIEW: ALERTS --- */}
+        {view === 'alerts' && (
+          <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex justify-between items-end px-2">
+              <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">Critical Shortages</h2>
+              <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded-lg">{alerts.length} Items</span>
+            </div>
+            
+            {alerts.length === 0 ? (
+              <div className="bg-white p-10 rounded-4xl text-center border-2 border-dashed border-slate-200">
+                <CheckCircle2 className="mx-auto text-green-400 mb-2" size={32} />
+                <p className="text-slate-400 text-sm font-bold">All Clinics Fully Stocked</p>
               </div>
             ) : (
-              <button 
-                onClick={handleCheckout} 
-                disabled={cart.length === 0 || loading} 
-                className={`w-full py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${cart.length === 0 ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-200 active:scale-95'}`}
-              >
-                {loading ? "..." : `Send to ${targetLoc}`}
-              </button>
+              alerts.map((a, i) => (
+                <div key={i} className="bg-white p-5 rounded-4xl border border-slate-100 shadow-sm flex justify-between items-center">
+                  <div className="flex-1 pr-4">
+                    <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase mb-1 inline-block">
+                      {a.clinic}
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-800 leading-tight">{a.Item_Name}</h3>
+                    <p className="text-[10px] text-slate-400 mt-1 font-medium">Min Target: {a.MinStock}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-red-600 leading-none">{a.current}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">On Shelf</p>
+                  </div>
+                </div>
+              ))
             )}
           </div>
-      </div>
+        )}
+
+        {/* --- VIEW: AUDIT (PDF RECEIPTS) --- */}
+        {view === 'audit' && (
+          <div className="space-y-4 animate-in fade-in">
+            <div className="flex justify-between items-center px-2">
+               <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                 {auditClinicFilter === "ALL" ? "District Receipts" : `${auditClinicFilter} Receipts`}
+               </h2>
+               <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                 {getFilteredAudit().length} Entries
+               </span>
+            </div>
+
+            {getFilteredAudit().length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-4xl border border-dashed border-slate-200">
+                <FileText className="text-slate-200 mx-auto mb-2" size={32} />
+                <p className="text-slate-400 text-xs font-bold uppercase">No receipts found for this selection</p>
+              </div>
+            ) : (
+              getFilteredAudit().map((log, i) => (
+                <div key={i} className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-start gap-4">
+                  <div className="p-3 bg-green-50 text-green-600 rounded-2xl">
+                    <FileText size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <p className="text-xs font-black text-slate-800 uppercase tracking-tighter">{log.Location}</p>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        {new Date(log.Date || log.Timestamp).toLocaleDateString('en-GB')}
+                      </p>
+                    </div>
+                    <p className="text-xs font-bold text-slate-600 mt-1">{log.Item_Name}</p>
+                    <div className="flex justify-between items-center mt-3 bg-slate-50 p-2 rounded-xl">
+                      <span className="text-[10px] font-black text-green-600 px-2">+ {log.Qty} RECEIVED</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">By {log.User}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Footer Summary Bar */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 px-6 flex justify-between items-center shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                <ShieldCheck size={20} />
+            </div>
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase leading-none">Status</p>
+                <p className="text-xs font-bold text-slate-800">System Monitoring Active</p>
+            </div>
+        </div>
+        <button onClick={fetchDistrictData} className="p-3 bg-slate-100 text-slate-600 rounded-2xl active:scale-95 transition">
+            <Search size={18} />
+        </button>
+      </footer>
     </div>
   );
 };
@@ -992,14 +1000,14 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
     const res = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify({
-        action: 'recordUsage',
-        operation: 'add', // ⬅️ Tells GAS to add stock instead of subtract
+        action: 'recordUsage', 
+        operation: 'add', // ⬅️ Crucial: Tells GAS to INCREASE stock
+        status: 'Receipt',  // ⬅️ Crucial: For the STOR Manager's Audit view
         location: user.location,
-        // Mapping the PDF items to the format GAS expects
         cart: itemsToSubmit.map(i => ({ 
-          name: i.item, 
-          qty: i.quantity, 
-          code: String(i.item).trim() 
+          name: String(i.item).trim(), 
+          qty: Number(i.quantity), 
+          code: String(i.item).trim() // Using name as code for PDF items
         })),
         user: user.name
       })
@@ -1008,9 +1016,9 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
     const data = await res.json();
     if (data.status === 'success') {
       alert("Stock successfully updated from PDF!");
-      setPdfItems(null); // ✅ Clear state to close the modal
-      refreshData();     // Update the inventory numbers on screen
-      setView('menu');   // Go back to the main menu
+      setPdfItems(null); 
+      refreshData();     
+      setView('menu');   
     }
   } catch (err) {
     alert("Failed to update stock via PDF.");
