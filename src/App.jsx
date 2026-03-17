@@ -805,6 +805,7 @@ useEffect(() => {
     try {
       const resp = await fetch(API_URL, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'confirmReceipt',
           txnId: scannedId.trim(), // We send it as txnId, GAS catches it
@@ -921,6 +922,7 @@ useEffect(() => {
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'refillRequest',
           location: user.location,
@@ -980,6 +982,7 @@ const handleManualPDFSubmit = async (itemsToSubmit) => {
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'recordUsage', 
         operation: 'add', // ⬅️ Crucial: Tells GAS to INCREASE stock
