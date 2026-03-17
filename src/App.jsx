@@ -905,7 +905,14 @@ useEffect(() => {
         setTxnId(data.txnId); // Display the QR Code
         setCart([]);
         setStatus({msg: 'Transfer Initiated'});
-        refreshData();
+        // 2. Clear everything and go home after 2 seconds
+        setTimeout(() => {
+          setStatus(null);
+          setTxnId(null);   // ✅ IMPORTANT: Clear the transaction ID
+          setTargetLoc(""); // ✅ Clear the destination
+          setView('menu');  // ✅ IMPORTANT: Go back to Dashboard
+          refreshData();    // Update the numbers
+        }, 2000);
       } else {
         alert("Transfer failed: " + (data.message || "Action not recognized by server."));
       }
