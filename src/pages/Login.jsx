@@ -99,7 +99,7 @@ const Login = ({ setUser }) => {
 					<img
 						src="/LOGO-K-DIP.png"
 						alt="Logo K-DIP"
-						className="h-20 w-auto object-contain"
+						className="h-27 w-auto object-contain"
 					/>
 				</div>
 				<h1 className="text-xl font-bold mb-6 text-center text-slate-800">

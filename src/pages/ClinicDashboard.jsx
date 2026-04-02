@@ -473,7 +473,7 @@ const ClinicDashboard = ({ user, logout }) => {
 							<ChevronLeft size={18} />
 						</button>
 					)}
-					<img src="/LOGO-K-DIP.png" alt="Logo" className="h-6 w-auto" />
+					<img src="/LOGO-K-DIP.png" alt="Logo" className="h-10 w-auto" />
 					<div className="flex flex-col">
 						<span className="font-bold text-sm truncate uppercase tracking-tight text-slate-800">
 							{(user?.name || user?.username || "Staff").replace(/_/g, " ")}
