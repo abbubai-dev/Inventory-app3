@@ -165,25 +165,32 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 });
 // --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
-    if (req.user.role !== "Clinic") return res.status(403).json({ error: "Forbidden" });
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
     try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
         const data = await pdf(req.file.buffer);
         const text = data.text;
         const results = [];
 
-        // This is the improved multi-line regex
-        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})[\s\S]+?(\d+)\n*(?:\n| )+(\d+)\n*(?:\n| )+(\d+)\n*(?:\n| )+(\d+)/g;
+        // IMPROVED REGEX FOR KEW.PS-8
+        // 1. (\d{3}-\d{3}-\d{3}-\d{4}) -> Matches Code
+        // 2. [\s\S]+?\"(\d+)\n?\" -> Finds first number in quotes (Dimohon)
+        // 3. [\s\S]+?\"(\d+)\n?\" -> Finds second number in quotes (Baki)
+        // 4. [\s\S]+?\"(\d+)\n?\" -> Finds third number in quotes (Diluluskan)
+        // 5. [\s\S]+?\"(\d+)\n?\" -> Finds fourth number in quotes (Diterima)
+        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"/g;
 
         let match;
         while ((match = rowRegex.exec(text)) !== null) {
             results.push({
-                item: match[1].trim(),       // The Code
-                quantity: parseInt(match[5]) // Kuantiti Diterima
+                item: match[1].trim(),       // Item Code (e.g., 107-013-...)
+                quantity: parseInt(match[5]) // The 4th quoted number (Diterima)
             });
         }
+
+        logger.info(`Parsed ${results.length} items from PDF`);
         res.json({ success: true, transferred: results });
+
     } catch (error) {
         logger.error("PDF Processing Error:", error);
         res.status(500).json({ error: "Internal Server Error" });
