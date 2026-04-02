@@ -95,7 +95,7 @@ const WarehouseDashboard = ({ user, logout }) => {
 		<div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-24">
       		<header className="bg-white p-6 border-b sticky top-0 z-20 flex justify-between items-center shadow-sm">
         		<div>
-          			<h1 className="text-xl font-black text-slate-900 tracking-tight italic">KAWALAN INVENTORY PKPDKK</h1>
+          			<h1 className="text-xl font-black text-slate-900 tracking-tight italic">KAWALAN INVENTORI</h1>
           			<p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Stor dan Klinik</p>
         		</div>
         		<button onClick={logout} className="p-3 bg-slate-100 rounded-full text-slate-400 active:scale-90 transition">

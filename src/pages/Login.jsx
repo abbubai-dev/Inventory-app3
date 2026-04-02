@@ -97,13 +97,13 @@ const Login = ({ setUser }) => {
 			<div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
 				<div className="flex justify-center mb-6">
 					<img
-						src="/logo_PKPDKK.png"
-						alt="PKPDKK Logo"
+						src="/LOGO-K-DIP.png"
+						alt="Logo K-DIP"
 						className="h-20 w-auto object-contain"
 					/>
 				</div>
 				<h1 className="text-xl font-bold mb-6 text-center text-slate-800">
-					Sistem Inventori PKPDKK
+					Kuala Kangsar Dental Inventory Platform
 				</h1>
 
 				{step === 1 ? (
