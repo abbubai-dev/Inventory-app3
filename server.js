@@ -153,7 +153,7 @@ app.get("/api/adduser", jwtAuth, async (req, res) => {
 });
 
 // Clinic routes
-app.post("/api/clinicactions", jwtAuth, async (req, res) => {
+app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 	logger.info(`Received ${req.body.action} request`);
 
 	if (req.user.role !== "Clinic")

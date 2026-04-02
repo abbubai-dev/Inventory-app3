@@ -286,7 +286,7 @@ const ClinicDashboard = ({ user, logout }) => {
     	try {
         	setActionLoading(true);
         	const { data: checkoutResponse } = await axios.post(
-            	"/api/clinicactions", // ✅ Plural endpoint as synced with server.js
+            	"/api/clinicaction", // Previous is Plural. remove 's'
             	{
                 	action: "checkout",
                 	from: String(user.location).trim(),
