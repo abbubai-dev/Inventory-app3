@@ -208,7 +208,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				},
 				{
 					headers: {
-						Authorization: `Bearer ${token})}`,
+						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
@@ -248,7 +248,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				},
 				{
 					headers: {
-						Authorization: `Bearer ${token})}`,
+						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
@@ -271,47 +271,62 @@ const ClinicDashboard = ({ user, logout }) => {
 	};
 
 	const handleClinicTransfer = async () => {
-		if (!targetLoc) return alert("Please select a destination clinic.");
-		if (cart.length === 0) return alert("Your transfer cart is empty.");
+    	if (!targetLoc) return alert("Please select a destination clinic.");
+    	if (cart.length === 0) return alert("Your transfer cart is empty.");
 
-		// ✅ SANITIZATION: Ensure data types are consistent
-		const sanitizedCart = cart.map((item) => ({
-			name: String(item.name || "").trim(),
-			code: String(item.code || item.Code || "").trim(),
-			qty: Number(item.qty) || 0,
-		}));
+    	// ✅ SANITIZATION: Ensure data types are consistent
+    	const sanitizedCart = cart.map((item) => ({
+        	name: String(item.name || "").trim(),
+        	code: String(item.code || item.Code || "").trim(),
+        	qty: Number(item.qty) || 0,
+    	}));
 
-		const token = localStorage.getItem("InventoryAppToken");
+    	const token = localStorage.getItem("InventoryAppToken");
 
-		try {
-			setActionLoading(true);
-			const { data: checkoutResponse } = await axios.post(
-				"/api/clinicaction",
-				{
-					action: "checkout", // Matches your GAS if(action === "checkout")
-					from: String(user.location).trim(),
-					to: String(targetLoc).trim(),
-					cart: sanitizedCart,
-				},
-				{
-					headers: {
-						Authorization: `Bearer ${token})}`,
-					},
-				},
-			);
-			setTxnId(checkoutResponse.txnId);
-			setCart([]);
-			setStatus({ msg: "Transfer Initiated" });
-			refreshData();
-		} catch (error) {
-			console.error("Transfer failed:", error);
-			alert(
-				"Transfer failed: " +
-					(error.message || "Action not recognized by server."),
-			);
-		} finally {
-			setActionLoading(false);
-		}
+    	try {
+        	setActionLoading(true);
+        	const { data: checkoutResponse } = await axios.post(
+            	"/api/clinicactions", // ✅ Plural endpoint as synced with server.js
+            	{
+                	action: "checkout",
+                	from: String(user.location).trim(),
+                	to: String(targetLoc).trim(),
+                	cart: sanitizedCart,
+            	},
+            	{
+                	headers: {
+                    	Authorization: `Bearer ${token}`,
+                	},
+            	},
+        	);
+
+        	if (checkoutResponse.status === 'success') {
+            	setTxnId(checkoutResponse.txnId); // Display the QR Code
+            	setCart([]);
+            	setStatus({ msg: "Transfer Initiated" });
+            
+            	// Clear everything and go home after 2 seconds
+            	setTimeout(() => {
+                	setStatus(null);
+                	setTxnId(null);   // Clear the transaction ID to hide QR
+                	setTargetLoc(""); // Clear the destination dropdown
+                	setView('menu');  // Go back to the main Dashboard menu
+                	refreshData();    // Refresh the inventory numbers
+            	}, 2000);
+
+        	} else {
+            	alert("Transfer failed: " + (checkoutResponse.message || "Action not recognized by server."));
+        	}
+
+    	} catch (error) {
+        	console.error("Transfer failed:", error);
+        	alert(
+            	"Transfer failed: " +
+                (error.response?.data?.error || error.message || "Connection Error")
+        	);
+    	} finally {
+        	setActionLoading(false);
+    	}
 	};
 
 	const handleRefillRequest = async (items) => {
@@ -331,7 +346,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				},
 				{
 					headers: {
-						Authorization: `Bearer ${token})}`,
+						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
@@ -406,7 +421,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				},
 				{
 					headers: {
-						Authorization: `Bearer ${token})}`,
+						Authorization: `Bearer ${token}`,
 					},
 				},
 			);
