@@ -163,48 +163,32 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 
 	res.json({ success: true });
 });
-app.post(
-	"/api/processreceipt",
-	jwtAuth,
-	upload.single("invoice"),
-	async (req, res) => {
-		logger.info("Received usage request");
+// --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
+app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
+    if (req.user.role !== "Clinic") return res.status(403).json({ error: "Forbidden" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-		if (req.user.role !== "Clinic")
-			return res.status(403).json({ error: "Forbidden" });
+    try {
+        const data = await pdf(req.file.buffer);
+        const text = data.text;
+        const results = [];
 
-		if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        // This is the improved multi-line regex
+        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})[\s\S]+?(\d+)\n*(?:\n| )+(\d+)\n*(?:\n| )+(\d+)\n*(?:\n| )+(\d+)/g;
 
-		try {
-			const data = await pdf(req.file.buffer);
-			const text = data.text;
-			const results = [];
-			const lines = text.split("\n");
-
-			lines.forEach((line) => {
-				const cleanLine = line.trim();
-
-				// KEW.PS-8 Pattern: Code/Name followed by Dimohon, Baki, Diluluskan, Diterima
-				// We look for 4 numbers in a row and ignore anything after them (Catatan)
-				const match = cleanLine.match(
-					/(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(.*)/,
-				);
-
-				if (match) {
-					results.push({
-						item: match[1].trim(), // The Item Name/Code
-						quantity: parseInt(match[5], 10), // The 'Kuantiti Diterima'
-					});
-				}
-			});
-
-			res.json({ success: true, transferred: results });
-		} catch (error) {
-			logger.error("PDF Processing Error:", error);
-			res.status(500).json({ error: "Internal Server Error" });
-		}
-	},
-);
+        let match;
+        while ((match = rowRegex.exec(text)) !== null) {
+            results.push({
+                item: match[1].trim(),       // The Code
+                quantity: parseInt(match[5]) // Kuantiti Diterima
+            });
+        }
+        res.json({ success: true, transferred: results });
+    } catch (error) {
+        logger.error("PDF Processing Error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
 
 // Admin and clinic route
 app.get("/api/history", jwtAuth, async (req, res) => {
