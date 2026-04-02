@@ -372,7 +372,7 @@ const ClinicDashboard = ({ user, logout }) => {
 
 		try {
 			const { data: uploadResponse } = await axios.post(
-				"/api/process-receipt",
+				"/api/processreceipt",
 				formData,
 				{
 					headers: {
