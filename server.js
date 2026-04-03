@@ -175,16 +175,30 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
 		console.log(text); //to check the symbols
 		console.log("--- DEBUG PDF TEXT END ---");
 
-        // NEW GROUPED REGEX:  replace \s+ with [^\d-]+ (match anything that isn't a digit or a hyphen)
-        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})[^\d-]+([\s\S]+?)[^\d-]+"(\d+)[^\d-]+"(\d+)[^\d-]+"(\d+)[^\d-]+"(\d+)/g;
+		const lines = text.split("\n").map(l => l.trim()).filter(Boolean); // split to lines
 
-        let match;
-		while ((match = rowRegex.exec(text)) !== null) {
-    		results.push({
-        		code: match[1].trim(),
-        		name: match[2].trim(),
-        		quantity: parseInt(match[6]) // Kuantiti Diterima
-    		});
+        const codeRegex = /\d{3}-\d{3}-\d{3}-\d{4}/;
+
+		for (let i = 0; i < lines.length; i++) {
+  			if (codeRegex.test(lines[i])) {
+    			const parts = lines[i].split(/\s+/); // split by whitespace
+    			const code = parts[0];
+    
+    			// Name is everything until the first number
+    			let nameParts = [];
+    			let j = 1;
+    			while (j < parts.length && isNaN(parts[j])) {
+      				nameParts.push(parts[j]);
+      				j++;
+    			}
+    			const name = nameParts.join(" ");
+
+    			// Remaining numbers are the quantities
+    			const numbers = parts.slice(j).map(n => parseInt(n, 10));
+    			const quantityDiterima = numbers.length ? numbers[numbers.length - 1] : null; // last number
+
+    			results.push({ code, name, quantity: quantityDiterima });
+  			}
 		}
 
 
