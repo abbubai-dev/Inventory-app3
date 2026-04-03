@@ -171,21 +171,22 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         const data = await pdf(req.file.buffer);
         const text = data.text;
         const results = [];
+		console.log("--- DEBUG PDF TEXT START ---");
+		console.log(text); //to check the symbols
+		console.log("--- DEBUG PDF TEXT END ---");
 
-        // ✅ NEW GROUPED REGEX:
-        // Group 1: (\d{3}-\d{3}-\d{3}-\d{4}) -> The Code
-        // Group 2: ([\s\S]+?) -> The Name (everything until the closing quote)
-        // Groups 3-6: The 4 numeric cells (Dimohon, Baki, Lulus, Terima)
-        const rowRegex = /\"(\d{3}-\d{3}-\d{3}-\d{4})\n\s*([\s\S]+?)\s*\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"/g;
+        // NEW GROUPED REGEX:  replace \s+ with [^\d-]+ (match anything that isn't a digit or a hyphen)
+        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})[^\d-]+([\s\S]+?)[^\d-]+"(\d+)[^\d-]+"(\d+)[^\d-]+"(\d+)[^\d-]+"(\d+)/g;
 
         let match;
-        while ((match = rowRegex.exec(text)) !== null) {
-            results.push({
-                code: match[1].trim(),
-                name: match[2].trim().replace(/\n/g, ' '), // Clean up internal newlines
-                quantity: parseInt(match[6]) // Index 6 is now 'Kuantiti Diterima'
-            });
-        }
+		while ((match = rowRegex.exec(text)) !== null) {
+    		results.push({
+        		code: match[1].trim(),
+        		name: match[2].trim(),
+        		quantity: parseInt(match[6]) // Kuantiti Diterima
+    		});
+		}
+
 
         res.json({ success: true, transferred: results });
     } catch (error) {
