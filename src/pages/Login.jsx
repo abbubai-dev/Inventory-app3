@@ -95,11 +95,11 @@ const Login = ({ setUser }) => {
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-500 via-indigo-600 to-purple-700 p-6">
 			<div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-[2.5rem] border border-white/30 shadow-2xl p-8 text-white">
-				<div className="flex justify-center mb-6">
+				<div className="flex justify-center items-end mb-6">
 					<img
 						src="/LOGO-K-DIP.png"
 						alt="Logo K-DIP"
-						className="h-28 w-auto object-contain"
+						className="h-35 w-auto object-contain"
 					/>
 					<img
 						src="/K-DIP.png"
