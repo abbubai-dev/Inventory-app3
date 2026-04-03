@@ -169,37 +169,38 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
         const data = await pdf(req.file.buffer);
-        const text = data.text;
+
+        // 1. DATA NORMALIZATION (Cleaning the "Mess")
+    	// Remove quotes, replace commas with spaces, and fix newlines
+    	const cleanText = data.text
+      		.replace(/"/g, '')        // Remove all double quotes
+      		.replace(/,/g, ' ')       // Replace commas with spaces
+      		.replace(/\n\s*\n/g, '\n') // Remove empty lines
+      		.trim();
         const results = [];
 		console.log("--- DEBUG PDF TEXT START ---");
-		console.log(text); //to check the symbols
+		console.log(cleanText); //to check the symbols
 		console.log("--- DEBUG PDF TEXT END ---");
 
 		const lines = text.split("\n").map(l => l.trim()).filter(Boolean); // split to lines
-
         const codeRegex = /\d{3}-\d{3}-\d{3}-\d{4}/;
 
-		for (let i = 0; i < lines.length; i++) {
-  			if (codeRegex.test(lines[i])) {
-    			const parts = lines[i].split(/\s+/); // split by whitespace
-    			const code = parts[0];
-    
-    			// Name is everything until the first number
-    			let nameParts = [];
-    			let j = 1;
-    			while (j < parts.length && isNaN(parts[j])) {
-      				nameParts.push(parts[j]);
-      				j++;
-    			}
-    			const name = nameParts.join(" ");
+		// 2. CHUNKING REGEX 
+    	// This finds a Code and then grabs everything until it sees 4 numbers.
+    	// It works even if the data is spread across 2 or 3 lines.
+    	const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\s+([\s\S]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/g;
 
-    			// Remaining numbers are the quantities
-    			const numbers = parts.slice(j).map(n => parseInt(n, 10));
-    			const quantityDiterima = numbers.length ? numbers[numbers.length - 1] : null; // last number
-
-    			results.push({ code, name, quantity: quantityDiterima });
-  			}
-		}
+    	let match;
+    	while ((match = rowRegex.exec(cleanText)) !== null) {
+      		// Clean up the name (remove internal newlines)
+      		const itemName = match[2].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      		results.push({
+        		code: match[1],
+        		name: itemName,
+        		quantity: parseInt(match[6], 10) // match[6] is 'Kuantiti Diterima'
+      		});
+    	}
 
 
         res.json({ success: true, transferred: results });

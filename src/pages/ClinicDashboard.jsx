@@ -42,7 +42,7 @@ const ClinicDashboard = ({ user, logout }) => {
 	const [startDate, setStartDate] = useState("");
 	const [endDate, setEndDate] = useState("");
 	const [showLowStockModal, setShowLowStockModal] = useState(false);
-	const [hasAlerted, setHasAlerted] = useState(false); // ✅ Prevents modal from popping up repeatedly
+	const [hasAlerted, setHasAlerted] = useState(false); // Prevents modal from popping up repeatedly
 	const [pdfItems, setPdfItems] = useState(null); // To store items found in PDF
 	const [uploadingPDF, setUploadingPDF] = useState(false);
 
@@ -274,7 +274,7 @@ const ClinicDashboard = ({ user, logout }) => {
     	if (!targetLoc) return alert("Please select a destination clinic.");
     	if (cart.length === 0) return alert("Your transfer cart is empty.");
 
-    	// ✅ SANITIZATION: Ensure data types are consistent
+    	// SANITIZATION: Ensure data types are consistent
     	const sanitizedCart = cart.map((item) => ({
         	name: String(item.name || "").trim(),
         	code: String(item.code || item.Code || "").trim(),
@@ -399,40 +399,64 @@ const ClinicDashboard = ({ user, logout }) => {
 	};
 
 	const handleManualPDFSubmit = async (itemsToSubmit) => {
+		// 1. Initial Guard
 		if (!itemsToSubmit || itemsToSubmit.length === 0) return;
 
 		const token = localStorage.getItem("InventoryAppToken");
 
+		// 2. SANITIZATION PIPELINE (Lean Waste Reduction)
+		const sanitizedCart = itemsToSubmit
+			.map((i) => ({
+				// Trim spaces and remove any leftover newlines from PDF
+				name: String(i.name || "").replace(/\n/g, ' ').trim(),
+				code: String(i.code || "").replace(/\n/g, '').trim(),
+				// Ensure quantity is a clean positive integer
+				qty: Math.abs(parseInt(i.quantity, 10)) || 0,
+			}))
+			// Filter out any rows that have no name, no code, or 0 quantity
+			.filter((i) => i.code !== "" && i.qty > 0);
+
+		// 3. Final Check
+		if (sanitizedCart.length === 0) {
+			return alert("No valid items found to submit.");
+		}
+
 		try {
 			setActionLoading(true);
-			await axios.post(
-				"/api/clinicaction",
+			const { data: checkoutResponse } = await axios.post(
+				"/api/clinicaction", 
 				{
 					action: "recordUsage",
-            		operation: "add", // Adding to stock
-            		location: user.location,
-            		cart: itemsToSubmit.map((i) => ({
-                		name: i.name, // The readable name
-                		code: i.code, // The 12-digit code for matching
-                		qty: i.quantity,
-            		})),
-            		user: user.name,
-        		}, {
-            		headers: { Authorization: `Bearer ${token}` }
-        	});
+					operation: "add",
+					location: user.location,
+					cart: sanitizedCart,
+					user: user.name,
+				}, {
+					headers: { Authorization: `Bearer ${token}` }
+				}
+			);
 
-        	alert("Stock successfully updated from PDF!");
-        	setPdfItems(null);
-        	refreshData();
-        	setView("menu");
-    	} catch (error) {
-        	alert("Failed to update stock.");
-    	} finally {
-        	setActionLoading(false);
-    	}
+			if (checkoutResponse.status === 'success') {
+				alert("Stock successfully updated from PDF!");
+				setPdfItems(null);
+				// Wait 2 seconds so they can see the success before redirecting
+				setTimeout(() => {
+					refreshData();
+					setView("menu");
+				}, 2000);
+			} else {
+				alert("Update failed: " + (checkoutResponse.message || "Unknown Error"));
+			}
+
+		} catch (error) {
+			console.error("Submission Error:", error);
+			alert("Failed to update stock. Connection error.");
+		} finally {
+			setActionLoading(false);
+		}
 	};
 
-	// ✅ Trigger refresh on 'menu' so inventory loads for the alert
+	// Trigger refresh on 'menu' so inventory loads for the alert
 	// biome-ignore lint/correctness/useExhaustiveDependencies: false postitive
 	useEffect(() => {
 		setSearchTerm("");
