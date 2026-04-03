@@ -409,32 +409,27 @@ const ClinicDashboard = ({ user, logout }) => {
 				"/api/clinicaction",
 				{
 					action: "recordUsage",
-					operation: "add", // ⬅️ Tells GAS to add stock instead of subtract
-					location: user.location,
-					// Mapping the PDF items to the format GAS expects
-					cart: itemsToSubmit.map((i) => ({
-						name: i.item,
-						qty: i.quantity,
-						code: String(i.item).trim(),
-					})),
-					user: user.name,
-				},
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-				},
-			);
-			alert("Stock successfully updated from PDF!");
-			setPdfItems(null); // ✅ Clear state to close the modal
-			refreshData(); // Update the inventory numbers on screen
-			setView("menu"); // Go back to the main menu
-		} catch (error) {
-			console.error("Failed to update stock:", error);
-			alert("Failed to update stock via PDF.");
-		} finally {
-			setActionLoading(false);
-		}
+            		operation: "add", // Adding to stock
+            		location: user.location,
+            		cart: itemsToSubmit.map((i) => ({
+                		name: i.name, // The readable name
+                		code: i.code, // The 12-digit code for matching
+                		qty: i.quantity,
+            		})),
+            		user: user.name,
+        		}, {
+            		headers: { Authorization: `Bearer ${token}` }
+        	});
+
+        	alert("Stock successfully updated from PDF!");
+        	setPdfItems(null);
+        	refreshData();
+        	setView("menu");
+    	} catch (error) {
+        	alert("Failed to update stock.");
+    	} finally {
+        	setActionLoading(false);
+    	}
 	};
 
 	// ✅ Trigger refresh on 'menu' so inventory loads for the alert
@@ -1508,50 +1503,38 @@ const ClinicDashboard = ({ user, logout }) => {
 
 			{/* ✅ THIS IS WHERE pdfItems IS USED */}
 			{pdfItems && (
-				<div className="fixed inset-0 bg-black/70 z-10001 flex items-center justify-center p-4 backdrop-blur-md">
-					<div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-						<h3 className="font-black text-slate-900 text-lg mb-1">
-							Confirm PDF Data
-						</h3>
-						<p className="text-[10px] text-slate-400 mb-6 font-bold uppercase tracking-widest">
-							Parsed from KEW.PS-8
-						</p>
+    			<div className="fixed inset-0 bg-black/70 z-10001 flex items-center justify-center p-4 backdrop-blur-md">
+        			<div className="bg-white w-full max-w-sm rounded-[2.5rem] p-6 shadow-2xl animate-in zoom-in-95">
+            			<h3 className="font-black text-slate-900 text-lg mb-1">Verify Received Stock</h3>
+            			<p className="text-[10px] text-slate-400 mb-6 font-bold uppercase tracking-widest">Extracted from KEW.PS-8</p>
 
-						<div className="space-y-3 mb-8 max-h-64 overflow-y-auto pr-2">
-							{/* ✅ READING the items from pdfItems here */}
-							{pdfItems.map((item) => (
-								<div
-									key={item.item}
-									className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100"
-								>
-									<span className="text-xs font-bold text-slate-800 truncate pr-4">
-										{item.item}
-									</span>
-									<span className="text-sm font-black text-blue-600 bg-white px-3 py-1 rounded-xl shadow-sm">
-										x{item.quantity}
-									</span>
-								</div>
-							))}
-						</div>
+            			<div className="space-y-3 mb-8 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                			{pdfItems.map((item, idx) => (
+                    			<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-3">
+                        			<div className="flex-1 min-w-0">
+                            			<p className="text-xs font-black text-slate-800 truncate">{item.name}</p>
+                            			<p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5">{item.code}</p>
+                        			</div>
+                        			<div className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-sm">
+                            			x{item.quantity}
+                        			</div>
+                    			</div>
+                			))}
+            			</div>
 
-						<div className="flex gap-3">
-							<button
-								type="button"
-								onClick={() => setPdfItems(null)} // ✅ RESET: This closes the modal
-								className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold active:scale-95 transition"
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								onClick={() => handleManualPDFSubmit(pdfItems)} // ✅ PASSING the data to the submission function
-								className="flex-2 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 active:scale-95 transition flex items-center justify-center gap-2"
-							>
-								{actionLoading ? "Updating..." : "Confirm & Add"}
-							</button>
-						</div>
-					</div>
-				</div>
+            			<div className="flex gap-3">
+                			<button onClick={() => setPdfItems(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold">
+                    			Cancel
+                			</button>
+                			<button 
+                    			onClick={() => handleManualPDFSubmit(pdfItems)} 
+                    			className="flex-2 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
+                			>
+                    			{actionLoading ? "Updating..." : "Add to Shelf"}
+                			</button>
+            			</div>
+        			</div>
+    			</div>
 			)}
 		</div>
 	);
