@@ -99,17 +99,14 @@ const Login = ({ setUser }) => {
 					<img
 						src="/LOGO-K-DIP.png"
 						alt="Logo K-DIP"
-						className="h-27 w-auto object-contain"
+						className="h-28 w-auto object-contain"
 					/>
 					<img
 						src="/K-DIP.png"
-						alt="Logo K-DIP"
-						className="h-27 w-auto object-contain"
+						alt="Logo text K-DIP"
+						className="h-25 w-auto object-contain"
 					/>
 				</div>
-				<h1 className="text-xl font-bold mb-6 text-center text-slate-800">
-					Kuala Kangsar Dental Inventory Platform
-				</h1>
 
 				{step === 1 ? (
 					/* STEP 1 FORM */
