@@ -1533,17 +1533,30 @@ const ClinicDashboard = ({ user, logout }) => {
             			<p className="text-[10px] text-slate-400 mb-6 font-bold uppercase tracking-widest">Extracted from KEW.PS-8</p>
 
             			<div className="space-y-3 mb-8 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
-                			{pdfItems.map((item, idx) => (
-                    			<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-3">
-                        			<div className="flex-1 min-w-0">
-                            			<p className="text-xs font-black text-slate-800 truncate">{item.name}</p>
-                            			<p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5">{item.code}</p>
-                        			</div>
-                        			<div className="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-sm">
-                            			x{item.quantity}
-                        			</div>
-                    			</div>
-                			))}
+                			{/* Inside your pdfItems.map loop in the Modal */}
+							{pdfItems.map((item, idx) => (
+								<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-3">
+									<div className="flex-1 min-w-0">
+										<p className="text-xs font-black text-slate-800 truncate">{item.name}</p>
+										<p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5">{item.code}</p>
+									</div>
+									
+									{/* ✅ EDITABLE QUANTITY INPUT */}
+									<div className="flex flex-col items-end">
+										<label className="text-[8px] font-black text-blue-600 uppercase mb-1">Qty Recv</label>
+										<input
+											type="number"
+											value={item.quantity}
+											onChange={(e) => {
+												const newItems = [...pdfItems];
+												newItems[idx].quantity = parseInt(e.target.value) || 0;
+												setPdfItems(newItems); // Updates the list in real-time
+											}}
+											className="w-16 p-2 bg-white border-2 border-blue-100 rounded-xl text-center text-sm font-black text-blue-700 focus:border-blue-500 outline-none transition-all"
+										/>
+									</div>
+								</div>
+							))}
             			</div>
 
             			<div className="flex gap-3">
