@@ -169,44 +169,62 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
         const data = await pdf(req.file.buffer);
+        const rawText = data.text;
+        let results = [];
 
-        // 1. DATA NORMALIZATION (Cleaning the "Mess")
-    	// Remove quotes, replace commas with spaces, and fix newlines
-    	const cleanText = data.text
-      		.replace(/"/g, '')        // Remove all double quotes
-      		.replace(/,/g, ' ')       // Replace commas with spaces
-      		.replace(/\n\s*\n/g, '\n') // Remove empty lines
-      		.trim();
-        const results = [];
-		console.log("--- DEBUG PDF TEXT START ---");
-		console.log(cleanText); //to check the symbols
-		console.log("--- DEBUG PDF TEXT END ---");
+        // --- STRATEGI 1: High Precision (Guna Quotes & Comma) ---
+        // Ini paling tepat jika pdf-parse mengekalkan simbol jadual.
+        const quotedRegex = /\"(\d{3}-\d{3}-\d{3}-\d{4})[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"/g;
+        
+        let qMatch;
+        while ((qMatch = quotedRegex.exec(rawText)) !== null) {
+            results.push({
+                code: qMatch[1].trim(),
+                name: "Item Found (Quoted)", // Nama boleh ditambah dengan regex tambahan
+                quantity: parseInt(qMatch[5]) // Indeks 5 adalah 'Diterima'
+            });
+        }
 
-		const lines = text.split("\n").map(l => l.trim()).filter(Boolean); // split to lines
-        const codeRegex = /\d{3}-\d{3}-\d{3}-\d{4}/;
+        // --- STRATEGI 2: Fallback (Jika Strategi 1 Gagal/Kosong) ---
+        if (results.length === 0) {
+            console.log("Strategi 1 gagal. Menggunakan Fallback (Mashed Digits)...");
+            
+            // Regex untuk teks yang melekat (Mashed)
+            // Kita cari Code -> Nama -> Kelompok Nombor
+            const fallbackRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\n([\s\S]+?)\n(\d+)/g;
+            
+            let fMatch;
+            while ((fMatch = fallbackRegex.exec(rawText)) !== null) {
+                const code = fMatch[1].trim();
+                const name = fMatch[2].trim().replace(/\n/g, ' ');
+                const digits = fMatch[3];
 
-		// 2. CHUNKING REGEX 
-    	// This finds a Code and then grabs everything until it sees 4 numbers.
-    	// It works even if the data is spread across 2 or 3 lines.
-    	const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\s+([\s\S]+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/g;
+                // LOGIK SMART FALLBACK:
+                // Dalam KEW.PS-8, ada 4 kolum: Dimohon, Baki, Lulus, Terima.
+                // Jika "22322", kita bahagikan mengikut logik SPPA.
+                // Selalunya 'Diterima' adalah nombor terakhir dalam barisan.
+                
+                let qty;
+                if (digits.length === 4) {
+                    // Contoh: "1211" -> 1, 2, 1, [1]
+                    qty = parseInt(digits.slice(-1));
+                } else if (digits.length > 4) {
+                    // Contoh: "123210" -> Diterima mungkin "10"
+                    // Kita ambil 2 digit terakhir jika jumlah digit > 4
+                    qty = parseInt(digits.slice(-2)); 
+                } else {
+                    qty = parseInt(digits);
+                }
 
-    	let match;
-    	while ((match = rowRegex.exec(cleanText)) !== null) {
-      		// Clean up the name (remove internal newlines)
-      		const itemName = match[2].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      
-      		results.push({
-        		code: match[1],
-        		name: itemName,
-        		quantity: parseInt(match[6], 10) // match[6] is 'Kuantiti Diterima'
-      		});
-    	}
-
+                results.push({ code, name, quantity: qty });
+            }
+        }
 
         res.json({ success: true, transferred: results });
+
     } catch (error) {
-        logger.error("PDF Parsing Error:", error);
-        res.status(500).json({ error: "Failed to parse PDF" });
+        console.error("PDF Parsing Error:", error);
+        res.status(500).json({ error: "Gagal memproses PDF" });
     }
 });
 
