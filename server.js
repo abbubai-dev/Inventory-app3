@@ -211,7 +211,7 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
                 } else if (digits.length > 4) {
                     // Contoh: "123210" -> Diterima mungkin "10"
                     // Kita ambil 2 digit terakhir jika jumlah digit > 4
-                    qty = parseInt(digits.slice(-2)); 
+                    qty = parseInt(digits.slice(-1)); 
                 } else {
                     qty = parseInt(digits);
                 }
