@@ -22,7 +22,6 @@ import { QRCodeCanvas } from "qrcode.react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
-import logger from "./utils/logger";
 
 import { allLocations } from "../utils/constants";
 
@@ -84,7 +83,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				if (Array.isArray(data)) checkLowStock(data);
 			}
 		} catch (error) {
-			logger.error({ msg: "Error fetching data", error });
+			console.log("Error fetching data", error );
 		} finally {
 			setLoading(false);
 		}
@@ -217,7 +216,7 @@ const ClinicDashboard = ({ user, logout }) => {
 			refreshData();
 			setView("menu");
 		} catch (error) {
-			logger.error({ msg: "Error confirming receipt", error });
+			console.log("Error confirming receipt", error );
     		alert("Error confirming receipt. Try again.");
 		} finally {
 			setActionLoading(false);
@@ -261,7 +260,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				refreshData();
 			}, 2000);
 		} catch (error) {
-			logger.error({msg:"Failed to deduct stock:", error});
+			console.log("Failed to deduct stock:", error);
 			alert(
 				"Error: " +
 					(error.message || "Failed to deduct stock. Check GAS Logs."),
@@ -320,7 +319,7 @@ const ClinicDashboard = ({ user, logout }) => {
         	}
 
     	} catch (error) {
-        	logger.error({ msg:"Transfer failed:", error});
+        	console.log("Transfer failed:", error);
         	alert(
             	"Transfer failed: " +
                 (error.response?.data?.error || error.message || "Connection Error")
@@ -436,7 +435,7 @@ const ClinicDashboard = ({ user, logout }) => {
 					headers: { Authorization: `Bearer ${token}` }
 				}
 			);
-			logger.info({ msg: "GAS Response", response: checkoutResponse });
+			console.log("GAS Response",checkoutResponse);
 
 			if (checkoutResponse && checkoutResponse.status === 'success') {
 				alert("Stock successfully updated from PDF!");
@@ -449,11 +448,11 @@ const ClinicDashboard = ({ user, logout }) => {
 			} else {
 				const errorMsg = checkoutResponse?.message || "Format Mismatch";
     			alert(`Update failed: ${errorMsg}`);
-				logger.error({ msg: "Payload received", response: checkoutResponse });
+				console.log("Payload received",checkoutResponse);
 			}
 
 		} catch (error) {
-			logger.error({ msg:"Submission Error:", error});
+			console.log("Submission Error:", error);
 			alert("Failed to update stock. Connection error.");
 		} finally {
 			setActionLoading(false);
