@@ -154,17 +154,34 @@ app.get("/api/adduser", jwtAuth, async (req, res) => {
 
 // Clinic routes
 app.post("/api/clinicaction", jwtAuth, async (req, res) => {
-	logger.info(`Received ${req.body.action} request`);
+    logger.info(`Received ${req.body.action} request`);
 
-	if (req.user.role !== "Clinic")
-		return res.status(403).json({ error: "Forbidden" });
+    if (req.user.role !== "Clinic") {
+        return res.status(403).json({ error: "Forbidden" });
+    }
 
-	await axios.post(`${GOOGLE_URL}`, req.body);
+    try {
+        const response = await axios.post(GOOGLE_URL, req.body);
 
-	res.json({ success: true });
+        //send only response.data
+        res.json(response.data);
+    } catch (error) {
+        logger.error("Proxy Error:", error.message); // use logger instead.check in app.log
+        res.status(500).json({
+            status: "error",
+            message: "Google Connection Failed"
+        });
+    }
 });
+
 // --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
+	logger.info(`Received upload PDF request`);
+
+    if (req.user.role !== "Clinic") {
+        return res.status(403).json({ error: "Forbidden" });
+    }
+
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -187,7 +204,7 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
 
         // --- STRATEGI 2: Fallback (Jika Strategi 1 Gagal/Kosong) ---
         if (results.length === 0) {
-            console.log("Strategi 1 gagal. Menggunakan Fallback (Mashed Digits)...");
+            logger.error("Strategi 1 gagal. Menggunakan Fallback (Mashed Digits)...");
             
             // Regex untuk teks yang melekat (Mashed)
             // Kita cari Code -> Nama -> Kelompok Nombor
@@ -223,7 +240,7 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         res.json({ success: true, transferred: results });
 
     } catch (error) {
-        console.error("PDF Parsing Error:", error);
+        logger.error("PDF Parsing Error:", error);
         res.status(500).json({ error: "Gagal memproses PDF" });
     }
 });

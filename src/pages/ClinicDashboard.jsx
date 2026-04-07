@@ -435,8 +435,9 @@ const ClinicDashboard = ({ user, logout }) => {
 					headers: { Authorization: `Bearer ${token}` }
 				}
 			);
+			logger.info({ msg: "GAS Response", response: checkoutResponse });
 
-			if (checkoutResponse.status === 'success') {
+			if (checkoutResponse && checkoutResponse.status === 'success') {
 				alert("Stock successfully updated from PDF!");
 				setPdfItems(null);
 				// Wait 2 seconds so they can see the success before redirecting
@@ -445,11 +446,13 @@ const ClinicDashboard = ({ user, logout }) => {
 					setView("menu");
 				}, 2000);
 			} else {
-				alert("Update failed: " + (checkoutResponse.message || "Unknown Error"));
+				const errorMsg = checkoutResponse?.message || "Format Mismatch";
+    			alert(`Update failed: ${errorMsg}`);
+				logger.error({ msg: "Payload received", response: checkoutResponse });
 			}
 
 		} catch (error) {
-			console.error("Submission Error:", error);
+			logger.error("Submission Error:", error);
 			alert("Failed to update stock. Connection error.");
 		} finally {
 			setActionLoading(false);
