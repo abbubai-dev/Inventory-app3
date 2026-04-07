@@ -245,7 +245,7 @@ const ClinicDashboard = ({ user, logout }) => {
 					action: "recordUsage",
 					location: String(user.location).trim(), // Match sheet header exactly
 					cart: sanitizedCart,
-					user: String(user.name).trim(),
+					user: (user?.name || user?.username || "Staff").replace(/_/g, " "),
 				},
 				{
 					headers: {
@@ -290,7 +290,7 @@ const ClinicDashboard = ({ user, logout }) => {
             	"/api/clinicaction", // Previous is Plural. remove 's'
             	{
                 	action: "checkout",
-                	from: String(user.location).trim(),
+                	from: String(user?.location || "").trim(),
                 	to: String(targetLoc).trim(),
                 	cart: sanitizedCart,
             	},
@@ -339,7 +339,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				"/api/clinicaction",
 				{
 					action: "refillRequest",
-					location: user.location,
+					location: String(user?.location || "").trim(),
 					items: items.map((i) => ({
 						name: i.Item_Name,
 						stock: i[user.location],
@@ -429,9 +429,9 @@ const ClinicDashboard = ({ user, logout }) => {
 				{
 					action: "recordUsage",
 					operation: "add",
-					location: user.location,
+					location: String(user?.location || "").trim(),
 					cart: sanitizedCart,
-					user: user.name,
+					user: (user?.name || user?.username || "Staff").replace(/_/g, " "),
 				}, {
 					headers: { Authorization: `Bearer ${token}` }
 				}
