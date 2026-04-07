@@ -22,6 +22,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import logger from "./utils/logger";
 
 import { allLocations } from "../utils/constants";
 
@@ -83,7 +84,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				if (Array.isArray(data)) checkLowStock(data);
 			}
 		} catch (error) {
-			console.error("Error fetching data:", error);
+			logger.error({ msg: "Error fetching data", error });
 		} finally {
 			setLoading(false);
 		}
@@ -216,8 +217,8 @@ const ClinicDashboard = ({ user, logout }) => {
 			refreshData();
 			setView("menu");
 		} catch (error) {
-			console.error("Error confirming receipt:", error);
-			alert("Error confirming receipt. Try again.");
+			logger.error({ msg: "Error confirming receipt", error });
+    		alert("Error confirming receipt. Try again.");
 		} finally {
 			setActionLoading(false);
 		}
@@ -260,7 +261,7 @@ const ClinicDashboard = ({ user, logout }) => {
 				refreshData();
 			}, 2000);
 		} catch (error) {
-			console.error("Failed to deduct stock:", error);
+			logger.error({msg:"Failed to deduct stock:", error});
 			alert(
 				"Error: " +
 					(error.message || "Failed to deduct stock. Check GAS Logs."),
@@ -319,7 +320,7 @@ const ClinicDashboard = ({ user, logout }) => {
         	}
 
     	} catch (error) {
-        	console.error("Transfer failed:", error);
+        	logger.error({ msg:"Transfer failed:", error});
         	alert(
             	"Transfer failed: " +
                 (error.response?.data?.error || error.message || "Connection Error")
@@ -452,7 +453,7 @@ const ClinicDashboard = ({ user, logout }) => {
 			}
 
 		} catch (error) {
-			logger.error("Submission Error:", error);
+			logger.error({ msg:"Submission Error:", error});
 			alert("Failed to update stock. Connection error.");
 		} finally {
 			setActionLoading(false);
