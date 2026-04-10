@@ -42,7 +42,7 @@ const WarehouseDashboard = ({ logout }) => {
 
         setInventory(invData || []);
         // Match the "Status" header we discussed
-        setAuditLog((histData.usage || []).filter(u => u.Status === "Receipt"));
+        setAuditLog((histData.usage || []).filter(u => u.Status.toUpperCase() === "Receipt"));
         
     } catch (err) {
         console.error("Sync Error:", err);
