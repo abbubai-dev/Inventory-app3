@@ -176,62 +176,52 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 
 // --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
-    logger.info(`Processing PDF for: ${req.user.username}`);
-
-    if (req.user.role !== "Clinic") {
-        return res.status(403).json({ error: "Forbidden" });
-    }
-
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
         const data = await pdf(req.file.buffer);
         const rawText = data.text;
-        
-        // DEBUG: This is your best friend. 
-        // Look at your VPS terminal (docker logs) to see exactly what the PDF "sees".
-        // logger.debug("Raw PDF Text:", rawText); 
-
         const results = [];
-        // Updated regex: Be more flexible with spaces (\s+) instead of just newlines (\n)
-        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\s+([\s\S]+?)\s+(\d+)/g;
+
+        // ✅ IMPROVED REGEX: 
+        // 1. Matches the Code
+        // 2. Captures Name (allows multiple lines and numbers inside)
+        // 3. Captures Digits ONLY if they are on a new line (\n) and at least 4 digits long
+        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\s+([\s\S]+?)\n\s*(\d{4,8})(?=\s|$)/g;
         
         let match;
         while ((match = rowRegex.exec(rawText)) !== null) {
             const code = match[1].trim();
-            const name = match[2].trim().replace(/\n/g, ' ');
-            const digits = match[3] || ""; // Poka-Yoke: Fallback to empty string
+            const name = match[2].trim().replace(/\n/g, ' '); // Merge 3 lines into 1
+            const digits = match[3];
 
             let qty = 0;
 
+            // THE LOGIC FIX:
             if (digits.length === 8) {
-                // ✅ YOUR RULE: If 8 digits, take the last 2 (e.g., 05050512 -> 12)
+                // If 8 digits (e.g., 10101010), take last 2 columns
                 qty = parseInt(digits.slice(-2), 10);
-            } else if (digits.length >= 4) {
-                // If 4-7 digits, assume last column is single digit (e.g., 1115 -> 5)
-                // (Change to -2 if you expect double-digit arrivals in 4-digit strings)
+            } else if (digits.length === 4) {
+                // If 4 digits (e.g., 1211), take ONLY the last 1 digit
                 qty = parseInt(digits.slice(-1), 10);
+            } else if (digits.length > 4 && digits.length < 8) {
+                // For lengths like 5, 6, 7 (mixed columns)
+                // We take the last column. If it's 12110, qty is 10.
+                qty = parseInt(digits.slice(-1), 10); 
             } else {
-                // If it's just "5", just use 5
                 qty = parseInt(digits, 10);
             }
 
-            // Safety check: Only push if we actually got a number
             if (!isNaN(qty)) {
                 results.push({ code, name, quantity: qty });
             }
         }
 
-        logger.info(`Parsed ${results.length} items.`);
         res.json({ success: true, transferred: results });
 
     } catch (error) {
-        // This catches the crash and prevents the 500 from killing the server
-        logger.error("PDF Parsing Crash:", error.message);
-        res.status(500).json({ 
-            error: "Gagal memproses PDF", 
-            details: error.message 
-        });
+        logger.error("PDF Error:", error.message);
+        res.status(500).json({ error: "Gagal memproses PDF" });
     }
 });
 
