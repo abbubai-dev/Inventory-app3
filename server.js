@@ -176,7 +176,7 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 
 // --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
-	logger.info(`Received upload PDF request`);
+    logger.info(`Received upload PDF request`);
 
     if (req.user.role !== "Clinic") {
         return res.status(403).json({ error: "Forbidden" });
@@ -189,52 +189,26 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         const rawText = data.text;
         let results = [];
 
-        // --- STRATEGI 1: High Precision (Guna Quotes & Comma) ---
-        // Ini paling tepat jika pdf-parse mengekalkan simbol jadual.
-        const quotedRegex = /\"(\d{3}-\d{3}-\d{3}-\d{4})[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"[\s\S]+?\"(\d+)\n?\"/g;
+        // ✅ RE-OPTIMIZED: Only one robust Strategi (Mashed Digits)
+        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\n([\s\S]+?)\n(\d+)/g;
         
-        let qMatch;
-        while ((qMatch = quotedRegex.exec(rawText)) !== null) {
-            results.push({
-                code: qMatch[1].trim(),
-                name: "Item Found (Quoted)", // Nama boleh ditambah dengan regex tambahan
-                quantity: parseInt(qMatch[5]) // Indeks 5 adalah 'Diterima'
-            });
-        }
+        let match;
+        while ((match = rowRegex.exec(rawText)) !== null) {
+            const code = match[1].trim();
+            const name = match[2].trim().replace(/\n/g, ' ');
+            const digits = match[3];
 
-        // --- STRATEGI 2: Fallback (Jika Strategi 1 Gagal/Kosong) ---
-        if (results.length === 0) {
-            logger.error("Strategi 1 gagal. Menggunakan Fallback (Mashed Digits)...");
-            
-            // Regex untuk teks yang melekat (Mashed)
-            // Kita cari Code -> Nama -> Kelompok Nombor
-            const fallbackRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\n([\s\S]+?)\n(\d+)/g;
-            
-            let fMatch;
-            while ((fMatch = fallbackRegex.exec(rawText)) !== null) {
-                const code = fMatch[1].trim();
-                const name = fMatch[2].trim().replace(/\n/g, ' ');
-                const digits = fMatch[3];
+            if (digits.length === 8) {
+				//  Logic: If 8 digits, take last 2 (e.g., 22232215 -> 15)
+				qty = parseInt(digits.slice(-2));
+			} else if (digits.length >= 4) {
+				// Logic: Standard single-digit columns (e.g., 1211 -> 1)
+				qty = parseInt(digits.slice(-1));
+			} else {
+				qty = parseInt(digits);
+			}
 
-                // LOGIK SMART FALLBACK:
-                // Dalam KEW.PS-8, ada 4 kolum: Dimohon, Baki, Lulus, Terima.
-                // Jika "22322", kita bahagikan mengikut logik SPPA.
-                // Selalunya 'Diterima' adalah nombor terakhir dalam barisan.
-                
-                let qty;
-                if (digits.length === 4) {
-                    // Contoh: "1211" -> 1, 2, 1, [1]
-                    qty = parseInt(digits.slice(-1));
-                } else if (digits.length > 4) {
-                    // Contoh: "123210" -> Diterima mungkin "10"
-                    // Kita ambil 2 digit terakhir jika jumlah digit > 4
-                    qty = parseInt(digits.slice(-1)); 
-                } else {
-                    qty = parseInt(digits);
-                }
-
-                results.push({ code, name, quantity: qty });
-            }
+            results.push({ code, name, quantity: qty });
         }
 
         res.json({ success: true, transferred: results });
@@ -245,31 +219,36 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
     }
 });
 
-// Admin and clinic route
+// All route
 app.get("/api/history", jwtAuth, async (req, res) => {
 	logger.info("Received getinventory request");
 
-	if (req.user.role !== "Admin" && req.user.role !== "Clinic")
-		return res.status(403).json({ error: "Forbidden" });
+	// FIX: Added Warehouse to the allowed roles
+    if (req.user.role !== "Admin" && req.user.role !== "Clinic" && req.user.role !== "Warehouse")
+        return res.status(403).json({ error: "Forbidden" });
 
-	const { data: historyData } = await axios.get(
-		`${GOOGLE_URL}?action=getHistory&location=${req.user.location}`,
-	);
-	res.json(historyData);
+    // Handle Admin/Warehouse who might not have a specific location in their JWT
+    const locationParam = req.user.location ? `&location=${req.user.location}` : "";
+
+    const { data: historyData } = await axios.get(
+        `${GOOGLE_URL}?action=getHistory${locationParam}`,
+    );
+    res.json(historyData);
 });
 
-// Warehouse and clinic route
+// All route
 app.get("/api/getinventory", jwtAuth, async (req, res) => {
 	logger.info("Received getinventory request");
 
-	if (req.user.role !== "Warehouse" && req.user.role !== "Clinic")
-		return res.status(403).json({ error: "Forbidden" });
+	// FIX: Added Admin to the allowed roles
+    if (req.user.role !== "Warehouse" && req.user.role !== "Clinic" && req.user.role !== "Admin")
+        return res.status(403).json({ error: "Forbidden" });
 
-	const { data: inventoryData } = await axios.get(
-		`${GOOGLE_URL}?action=getInventory`,
-	);
+    const { data: inventoryData } = await axios.get(
+        `${GOOGLE_URL}?action=getInventory`,
+    );
 
-	res.json(inventoryData);
+    res.json(inventoryData);
 });
 
 // Serve html on all routes other than the ones declared
