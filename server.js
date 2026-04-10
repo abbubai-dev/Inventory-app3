@@ -113,11 +113,11 @@ app.get("/api/whoami", jwtAuth, async (req, res) => {
 	res.json(req.user);
 });
 
-// Warehouse routes
+// Warehouse & Clinic routes
 app.post("/api/checkout", jwtAuth, async (req, res) => {
 	logger.info("Received checkout request", req.body);
 
-	if (req.user.role !== "Warehouse")
+	if (req.user.role !== "Warehouse" && req.user.role !== "Clinic")
 		return res.status(403).json({ error: "Forbidden" });
 
 	const { data: checkoutResponse } = await axios.post(
