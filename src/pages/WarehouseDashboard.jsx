@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { LogOut, Search, ShieldCheck, FileText } from "lucide-react";
 import "jspdf-autotable";
 
-import { clinics } from "../utils/constants";
+import { clinics as clinicsConstanst } from "../utils/constants";
 
-const WarehouseDashboard = ({ user, logout }) => {
+const WarehouseDashboard = ({ logout }) => {
   const [view, setView] = useState('alerts');
   const [inventory, setInventory] = useState([]);
   const [clinics, setClinics] = useState([]);
@@ -38,13 +37,8 @@ const WarehouseDashboard = ({ user, logout }) => {
 
         if (invRes.status === 401 || invRes.status === 403) return logout();
 
-        // 1. Extract unique locations from the inventory data itself 
-        // (Since your server doesn't have a dedicated /api/locations yet)
-        if (invData.length > 0) {
-            const keys = Object.keys(invData[0]);
-            const exclude = ["Code", "Item_Name", "Category", "MinStock", "Unit", "Price", "Subcategory"];
-            setClinics(keys.filter(k => k && !exclude.includes(k)));
-        }
+        // Use imported locations instead of extracting from inventory
+        setClinics(clinicsConstanst);
 
         setInventory(invData || []);
         // Match the "Status" header we discussed
