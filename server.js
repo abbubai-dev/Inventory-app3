@@ -189,7 +189,7 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
         const rawText = data.text;
         let results = [];
 
-        // ✅ RE-OPTIMIZED: Only one robust Strategi (Mashed Digits)
+        //(Mashed Digits)
         const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\n([\s\S]+?)\n(\d+)/g;
         
         let match;
@@ -201,7 +201,7 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
             if (digits.length === 8) {
 				//  Logic: If 8 digits, take last 2 (e.g., 22232215 -> 15)
 				qty = parseInt(digits.slice(-2));
-			} else if (digits.length >= 4) {
+			} else if (digits.length >= 4 && digits.length <= 7) {
 				// Logic: Standard single-digit columns (e.g., 1211 -> 1)
 				qty = parseInt(digits.slice(-1));
 			} else {
