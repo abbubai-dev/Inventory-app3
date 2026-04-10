@@ -33,7 +33,7 @@ const ClinicDashboard = ({ user, logout }) => {
 	const [cart, setCart] = useState([]);
 	const [status, setStatus] = useState(null);
 	const [history, setHistory] = useState({ transfers: [], usage: [] });
-	const [histTab, setHistTab] = useState("in");
+	const [histTab, setHistTab] = useState("out");
 	const [searchTerm, setSearchTerm] = useState("");
 	const [actionLoading, setActionLoading] = useState(false);
 	const [selectedTxn, setSelectedTxn] = useState(null);
