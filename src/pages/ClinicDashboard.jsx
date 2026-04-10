@@ -567,9 +567,11 @@ const ClinicDashboard = ({ user, logout }) => {
 									</p>
 									<p className="text-xl font-black">
 										{history.usage?.filter(
-											(u) =>
-												new Date(u.Timestamp).toDateString() ===
-												new Date().toDateString(),
+										(u) =>
+											// 1. Match the Date
+											new Date(u.Timestamp).toDateString() === new Date().toDateString() &&
+											// 2. Only count items with "Used" status ✅
+											u.Status === "Used"
 										).length || 0}
 									</p>
 								</div>
