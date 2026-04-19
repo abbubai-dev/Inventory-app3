@@ -9,12 +9,35 @@ import { locations, roles } from "../utils/constants";
 const AdminDashboard = ({ logout }) => {
 	const [users, setUsers] = useState([]);
 	const [loading, setLoading] = useState(false);
-	const [adminHistory, setAdminHistory] = useState({
-		transfers: [],
-		usage: [],
-	});
+	const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [], });
 	const [reportLoading, setReportLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState("users");
+	// ✅ New state for Master List
+    const [masterList, setMasterList] = useState([]);
+    const [masterLoading, setMasterLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+
+	// Trigger data fetch based on tab
+    useEffect(() => {
+        if (activeTab === "users") getAllUsers();
+        if (activeTab === "master") fetchMasterList();
+        if (activeTab === "reports") fetchHistory();
+    }, [activeTab]);
+
+	const fetchMasterList = async () => {
+        const token = localStorage.getItem("InventoryAppToken");
+        try {
+            setMasterLoading(true);
+            const { data } = await axios.get("/api/getinventory", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setMasterList(data);
+        } catch (err) {
+            console.error("Failed to fetch master list", err);
+        } finally {
+            setMasterLoading(false);
+        }
+    };
 
 	const getAllUsers = async () => {
 		const token = localStorage.getItem("InventoryAppToken");
@@ -167,6 +190,17 @@ const AdminDashboard = ({ logout }) => {
 					{/** biome-ignore lint/a11y/useKeyWithClickEvents: false positive */}
 					<div
 						onClick={() => {
+							setActiveTab("master");
+							fetchMasterList();
+						}}
+						className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "master" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800"}`}
+					>
+						<FileText size={20} /> Master Item List
+					</div>
+					{/** biome-ignore lint/a11y/noStaticElementInteractions: false positive */}
+					{/** biome-ignore lint/a11y/useKeyWithClickEvents: false positive */}
+					<div
+						onClick={() => {
 							setActiveTab("reports");
 							fetchHistory();
 						}}
@@ -189,6 +223,7 @@ const AdminDashboard = ({ logout }) => {
 
 			{/* Main Content */}
 			<div className="flex-1 p-8 overflow-y-auto">
+				
 				{activeTab === "users" && (
 					<div className="animate-in fade-in duration-500">
 						<h1 className="text-2xl font-bold mb-8 text-slate-800">
@@ -285,6 +320,64 @@ const AdminDashboard = ({ logout }) => {
 									)}
 								</div>
 							</div>
+						</div>
+					</div>
+				)}
+
+				{activeTab === "master" && (
+					<div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+						<div className="flex justify-between items-end">
+							<div>
+								<h1 className="text-2xl font-black text-slate-900 tracking-tighter">Master Item List</h1>
+								<p className="text-xs text-slate-400 font-bold">Standardize SPPA Codes & Multipliers</p>
+							</div>
+						</div>
+
+						<input 
+							type="text"
+							placeholder="Search by Name, Code, or Alias..."
+							className="w-full p-4 bg-white rounded-2xl border border-slate-100 shadow-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+							value={searchTerm}
+							onChange={(e) => setSearchTerm(e.target.value)}
+						/>
+
+						<div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+							<table className="w-full text-left border-collapse">
+								<thead className="bg-slate-50">
+									<tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+										<th className="p-5">SPPA Code</th>
+										<th className="p-5">Item Name</th>
+										<th className="p-5">Alias</th>
+										<th className="p-5 text-center">Unit</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-slate-50">
+									{masterList
+										.filter(item => 
+											item.Item_Name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+											item.Item_Code?.includes(searchTerm) ||
+											item.Alias?.includes(searchTerm)
+										)
+										.map((item, idx) => (
+											<tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+												<td className="p-5 text-xs font-mono font-bold text-blue-600">
+													{item.Item_Code || <span className="text-red-400 italic">No Code</span>}
+												</td>
+												<td className="p-5">
+													<p className="text-xs font-black text-slate-800">{item.Item_Name}</p>
+												</td>
+												<td className="p-5 text-[10px] text-slate-400 italic max-w-xs truncate">
+													{item.Alias || "-"}
+												</td>
+												<td className="p-5 text-center">
+													<span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2.5 py-1 rounded-lg">
+														x{item.Unit || 1}
+													</span>
+												</td>
+											</tr>
+										))}
+								</tbody>
+							</table>
 						</div>
 					</div>
 				)}

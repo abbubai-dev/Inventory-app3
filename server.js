@@ -45,65 +45,67 @@ app.get("/api/getusers", async (_req, res) => {
 
 	res.json(toSendToFrontend);
 });
+
 app.post("/api/login", async (req, res) => {
-	logger.info("Received login request:", req.body);
+    logger.info("Received login request:", req.body);
+    const { username, password, selectedLoc } = req.body;
 
-	const { username, password, selectedLoc } = req.body;
+    if (!username || !password || !selectedLoc)
+        return res.status(400).json({ error: "Bad Request" });
 
-	if (!username || !password || !selectedLoc)
-		return res.status(400).json({ error: "Bad Request" });
+    const { data: loginData } = await axios.get(`${GOOGLE_URL}?action=getLoginData`);
+    const currentUser = loginData.users.find((user) => user.username === username);
 
-	const { data: loginData } = await axios.get(
-		`${GOOGLE_URL}?action=getLoginData`,
-	);
-	const currentUser = loginData.users.find(
-		(user) => user.username === username,
-	);
+    if (!currentUser) return res.status(404).json({ error: "Not Found" });
 
-	if (!currentUser) return res.status(404).json({ error: "Not Found" });
+    // Inform Google of the login attempt
+    await axios.get(`${GOOGLE_URL}?action=login&user=${currentUser.username}&pass=${password}&loc=${selectedLoc}`);
 
-	await axios.get(
-		`${GOOGLE_URL}?action=login&user=${currentUser.username}&pass=${password}&loc=${currentUser.selectedLoc}`,
-	);
+    // ✅ BYPASS: Only send OTP if the role is Clinic
+    const isClinic = currentUser.role === "Clinic";
+    if (isClinic) {
+        await axios.get(
+            `${GOOGLE_URL}?action=sendOTP&user=${encodeURIComponent(currentUser.username)}&email=${encodeURIComponent(currentUser.email)}`
+        );
+    }
 
-	await axios.get(
-		`${GOOGLE_URL}?action=sendOTP&user=${encodeURIComponent(currentUser.username)}&email=${encodeURIComponent(currentUser.email)}`,
-	);
-
-	res.json({ success: true });
+    // We send a flag 'otpSkipped' so the frontend knows whether to show the OTP screen
+    res.json({ success: true, otpSkipped: !isClinic });
 });
+
 app.post("/api/verifyotp", async (req, res) => {
-	logger.info("Received verifyOTP request:", req.body);
+    const { username, otp } = req.body;
 
-	const { username, password, otp } = req.body;
+    const { data: loginData } = await axios.get(`${GOOGLE_URL}?action=getLoginData`);
+    const currentUser = loginData.users.find((u) => u.username === username);
 
-	if (!username || !password || !otp)
-		return res.status(400).json({ error: "Bad Request" });
+    if (!currentUser) return res.status(401).json({ error: "Unauthorized" });
 
-	const { data: loginData } = await axios.get(
-		`${GOOGLE_URL}?action=getLoginData`,
-	);
-	const currentUser = loginData.users.find(
-		(user) => user.username === username,
-	);
+    // ✅ BYPASS: Only verify OTP for Clinics
+    if (currentUser.role === "Clinic") {
+        const { data: otpResult } = await axios.get(
+            `${GOOGLE_URL}?action=verifyOTP&email=${encodeURIComponent(currentUser.email)}&otp=${otp}`
+        );
 
-	if (!currentUser) return res.status(401).json({ error: "Unauthorized" });
+        if (!otpResult || otpResult.status === "error" || otpResult.success === false) {
+            return res.status(401).json({ error: "Invalid OTP" });
+        }
+    }
 
-	await axios.get(
-		`${GOOGLE_URL}?action=verifyOTP&email=${currentUser.email}&otp=${otp}`,
-	);
+    // Create user object and JWT
+    const user = {
+        username: currentUser.username,
+        role: currentUser.role,
+        location: currentUser.location,
+    };
 
-	const token = await new jose.SignJWT({
-		username: currentUser.username,
-		role: currentUser.role,
-		location: currentUser.location,
-	})
-		.setProtectedHeader({ alg: "HS256" })
-		.setIssuedAt()
-		.setExpirationTime("9h")
-		.sign(new TextEncoder().encode(process.env.JWT_SECRET));
+    const token = await new jose.SignJWT(user)
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuedAt()
+        .setExpirationTime("9h")
+        .sign(new TextEncoder().encode(process.env.JWT_SECRET));
 
-	res.json({ success: true, token });
+    res.json({ success: true, token, user });
 });
 
 // Auth routes
@@ -177,51 +179,65 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 // --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+        if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
 
+        // 1. EXTRACT: Get raw text from PDF
         const data = await pdf(req.file.buffer);
         const rawText = data.text;
-        const results = [];
 
-        // ✅ IMPROVED REGEX: 
-        // 1. Matches the Code
-        // 2. Captures Name (allows multiple lines and numbers inside)
-        // 3. Captures Digits ONLY if they are on a new line (\n) and at least 4 digits long
-        const rowRegex = /(\d{3}-\d{3}-\d{3}-\d{4})\s+([\s\S]+?)\n\s*(\d{4,8})(?=\s|$)/g;
-        
+        // 2. FIND ALL CODES: Create a list of where every item starts
+        const codeRegex = /\d{3}-\d{3}-\d{3}-\d{4}/g;
+        const itemAnchors = [];
         let match;
-        while ((match = rowRegex.exec(rawText)) !== null) {
-            const code = match[1].trim();
-            const name = match[2].trim().replace(/\n/g, ' '); // Merge 3 lines into 1
-            const digits = match[3];
+        while ((match = codeRegex.exec(rawText)) !== null) {
+            itemAnchors.push({ code: match[0], index: match.index });
+        }
 
-            let qty = 0;
+        // 3. PROCESS BLOCKS: Extract data between anchors
+        const results = itemAnchors.map((anchor, i) => {
+            const start = anchor.index;
+            // The block ends where the next item starts, or at the end of the text
+            const end = itemAnchors[i + 1] ? itemAnchors[i + 1].index : rawText.length;
+            const block = rawText.substring(start, end);
 
-            // THE LOGIC FIX:
-            if (digits.length === 8) {
-                // If 8 digits (e.g., 10101010), take last 2 columns
-                qty = parseInt(digits.slice(-2), 10);
-            } else if (digits.length === 4) {
-                // If 4 digits (e.g., 1211), take ONLY the last 1 digit
-                qty = parseInt(digits.slice(-1), 10);
-            } else if (digits.length > 4 && digits.length < 8) {
-                // For lengths like 5, 6, 7 (mixed columns)
-                // We take the last column. If it's 12110, qty is 10.
-                qty = parseInt(digits.slice(-1), 10); 
-            } else {
-                qty = parseInt(digits, 10);
-            }
+            // 4. EXTRACT NUMBERS: Find every standalone number in this block
+            const allNumbers = block.match(/\d+/g) || [];
+            
+            // POKA-YOKE: Filter out numbers that are part of the Item Code itself
+            const codeParts = anchor.code.split('-');
+            const dataNumbers = allNumbers.filter(n => !codeParts.includes(n));
 
-            if (!isNaN(qty)) {
-                results.push({ code, name, quantity: qty });
-            }
+            // 5. QUANTITY LOGIC: In KEW.PS-8, "Kuantiti Diterima" is the LAST number in the sequence
+            // This works even if the description contains numbers like "10BX" or "1 pkt"
+            const quantity = dataNumbers.length > 0 
+                ? parseInt(dataNumbers[dataNumbers.length - 1], 10) 
+                : 0;
+
+            // 6. NAME LOGIC: Extract the description
+            // We take the block and split it at the first comma/quote that starts the quantity columns
+            let name = block.replace(anchor.code, '').trim();
+            const nameMatch = name.match(/^[\s\S]+?(?="|,|\n\s*\d+)/);
+            name = nameMatch ? nameMatch[0] : name.split(/\n/)[0];
+            
+            name = name
+                .replace(/[,"'\n\r]/g, ' ') // Clean PDF artifacts
+                .replace(/\s+/g, ' ')      // Clean extra spaces
+                .trim();
+
+            return { code: anchor.code, name, quantity };
+        }).filter(item => item.quantity > 0);
+
+        // 7. SUCCESS CHECK
+        if (results.length === 0) {
+            console.warn("⚠️ No items extracted. Raw text starts with:", rawText.substring(0, 200));
+            return res.status(400).json({ success: false, message: "No items detected in PDF." });
         }
 
         res.json({ success: true, transferred: results });
 
-    } catch (error) {
-        logger.error("PDF Error:", error.message);
-        res.status(500).json({ error: "Gagal memproses PDF" });
+    } catch (err) {
+        console.error("❌ PDF Processing Crash:", err);
+        res.status(500).json({ success: false, error: "Server error during PDF processing" });
     }
 });
 

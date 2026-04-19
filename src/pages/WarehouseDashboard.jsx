@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { LogOut, Search, ShieldCheck, FileText } from "lucide-react";
+import { LogOut, Search, ShieldCheck, FilePlus, Repeat, Activity } from "lucide-react";
 import "jspdf-autotable";
 
 import { clinics as clinicsConstanst } from "../utils/constants";
@@ -41,8 +41,8 @@ const WarehouseDashboard = ({ logout }) => {
         setClinics(clinicsConstanst);
 
         setInventory(invData || []);
-        // Match the "Status" header we discussed
-        setAuditLog((histData.usage || []).filter(u => u.Status.toUpperCase() === "Receipt"));
+        // Store all transactions, but we will filter them in the UI
+        setAuditLog(histData.usage || []);
         
     } catch (err) {
         console.error("Sync Error:", err);
@@ -160,24 +160,54 @@ const WarehouseDashboard = ({ logout }) => {
 
         		{/* --- VIEW: AUDIT RECEIPTS --- */}
         		{view === 'audit' && (
-          			<div className="space-y-3 animate-in fade-in">
-             			{
-							getFilteredAudit().map((log, i) => (
+					<div className="space-y-3 animate-in fade-in">
+						{getFilteredAudit().map((log, i) => {
+							// ✅ DEFINE VISUAL SIGNALS BASED ON STATUS
+							const isAddition = log.Status === "Add" || log.Status === "TransferIn";
+							const isUsage = log.Status === "Used";
+							const isTransfer = log.Status?.includes("Transfer");
+
+							return (
 								<div key={i} className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-start gap-4">
-									<div className="p-3 bg-green-50 text-green-600 rounded-2xl"><FileText size={20} /></div>
+									{/* Icon Logic */}
+									<div className={`p-3 rounded-2xl ${
+										isAddition ? "bg-green-50 text-green-600" : 
+    									isTransfer ? "bg-blue-50 text-blue-600" :
+										isUsage ? "bg-orange-50 text-orange-600" : 
+										"bg-blue-50 text-blue-600"
+									}`}>
+										{isAddition && <FilePlus size={20} />}
+										{isTransfer && <Repeat size={20} />}      {/* ✅ New Icon for transfers */}
+										{isUsage && <Activity size={20} />}
+									</div>
+
 									<div className="flex-1">
-										<div className="flex justify-between text-[10px] font-black text-slate-400 uppercase mb-1">
-											<span>{log.Location}</span>
-											<span>{new Date(log.Date || log.Timestamp).toLocaleDateString()}</span>
+										<div className="flex justify-between text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+											<span>{log.TxnID}</span>
+											<span>{new Date(log.Timestamp).toLocaleDateString()}</span>
 										</div>
+										
 										<h4 className="text-xs font-black text-slate-700">{log.Item_Name}</h4>
-										<div className="flex justify-between items-center mt-3 bg-green-50/50 p-2 px-3 rounded-xl border border-green-100">
-											<span className="text-[10px] font-black text-green-700">+ {log.Qty} RECV</span>
-											<span className="text-[10px] font-bold text-slate-400">BY {log.User}</span>
+										
+										{/* THE FLOW: FROM -> TO */}
+										<div className="flex items-center gap-2 mt-2">
+											<span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{log.Location_From}</span>
+											<span className="text-slate-300">→</span>
+											<span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{log.Location_To}</span>
+										</div>
+
+										<div className={`flex justify-between items-center mt-3 p-2 px-3 rounded-xl border ${
+											isAddition ? "bg-green-50/50 border-green-100" : "bg-slate-50/50 border-slate-100"
+										}`}>
+											<span className={`text-[10px] font-black ${isAddition ? "text-green-700" : "text-slate-700"}`}>
+												{isAddition ? "+" : "-"} {log.Total_Items} ITEMS
+											</span>
+											<span className="text-[9px] font-bold text-slate-400 uppercase">BY {log.User}</span>
 										</div>
 									</div>
 								</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 			</main>

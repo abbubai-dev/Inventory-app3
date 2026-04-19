@@ -27,22 +27,53 @@ const Login = ({ setUser }) => {
 		initialLoad();
 	}, []);
 
+	// Helper to handle the actual API call and state update
+	const finalizeLogin = async (otpCode) => {
+		setLoading(true);
+		try {
+			const { data: loginResponse } = await axios.post("/api/verifyotp", {
+				username: selectedUser,
+				password,
+				otp: otpCode,
+			});
+
+			if (loginResponse.success) {
+				localStorage.setItem("InventoryAppToken", loginResponse.token);
+				localStorage.setItem("InventoryAppUser", JSON.stringify(loginResponse.user));
+				
+				// This triggers the App.jsx to show the dashboard
+				setUser(loginResponse.user);
+			}
+		} catch (err) {
+			console.error("Verification error", err);
+			alert("Verification error: Invalid OTP or session expired.");
+		} finally {
+			setLoading(false);
+		}
+	};
+	
 	// STEP 1: Validate Password and Send OTP
 	const handleRequestOTP = async (e) => {
 		e.preventDefault();
 		setLoading(true);
 
 		try {
-			await axios.post("/api/login", {
+			const response = await axios.post("/api/login", {
 				username: selectedUser,
 				password,
 				selectedLoc,
 			});
 
-			alert("OTP sent!");
-			setStep(2);
+			// ✅ Check if the server said we can skip OTP (Admin/Warehouse)
+			if (response.data.otpSkipped) {
+				// Call Phase 2 immediately with a dummy code
+				await finalizeLogin("0000"); 
+			} else {
+				alert("OTP sent!");
+				setStep(2); // Proceed to OTP screen for Clinics
+			}
 		} catch (err) {
-			alert("Login Failed");
+			alert("Login Failed: Check credentials");
 			console.error("Login Failed", err);
 		} finally {
 			setLoading(false);
@@ -52,31 +83,7 @@ const Login = ({ setUser }) => {
 	// STEP 2: Verify OTP and Log In
 	const handleVerifyOTP = async (e) => {
 		e.preventDefault();
-		setLoading(true);
-
-		try {
-			const { data: loginData } = await axios.post("/api/verifyotp", {
-				username: selectedUser,
-				password,
-				selectedLoc,
-				otp,
-			});
-
-			const { data: reqUser } = await axios.get("/api/whoami", {
-				headers: {
-					Authorization: `Bearer ${loginData.token}`,
-				},
-			});
-
-			localStorage.setItem("InventoryAppToken", loginData.token);
-			localStorage.setItem("InventoryAppUser", JSON.stringify(reqUser));
-			setUser(reqUser);
-		} catch (err) {
-			console.error("Verification error", err);
-			alert("Verification error.");
-		} finally {
-			setLoading(false);
-		}
+		await finalizeLogin(otp);
 	};
 
 	if (firstSetup) {

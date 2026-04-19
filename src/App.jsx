@@ -18,32 +18,33 @@ export default function App() {
 
 	const [isVerifying, setIsVerifying] = useState(true);
 
-	const logout = () => {
-		setUser(null);
-		localStorage.removeItem("InventoryAppToken");
-		localStorage.removeItem("InventoryAppUser");
-		window.location.href = "/";
+	const handleLogout = () => {
+	localStorage.removeItem("InventoryAppToken");
+	localStorage.removeItem("InventoryAppUser");
+	setUser(null);
 	};
 
 	useEffect(() => {
 		const verifyUser = async () => {
 			const token = localStorage.getItem("InventoryAppToken");
+			
 			if (!token) {
 				setIsVerifying(false);
 				return;
 			}
 
 			try {
-				const { data } = await axios.get("/api/whoami", {
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
+				const { data: user } = await axios.get("/api/whoami", {
+					headers: { Authorization: `Bearer ${token}` },
 				});
-				setUser(data);
-				setIsVerifying(false);
+				setUser(user);
 			} catch (_error) {
+				// Token is either expired or tampered with
+				localStorage.removeItem("InventoryAppToken");
+				localStorage.removeItem("InventoryAppUser");
 				setUser(null);
 			} finally {
+				// This runs regardless of success or failure
 				setIsVerifying(false);
 			}
 		};
@@ -65,58 +66,40 @@ export default function App() {
 	}
 
 	return (
-		<Router>
-			<Routes>
-				<Route
-					path="/"
-					element={
-						!user ? (
-							<Login setUser={setUser} />
-						) : (
-							<Navigate
-								to={
-									user.role === "Admin"
-										? "/admin"
-										: user.role === "Warehouse"
-											? "/warehouse"
-											: "/clinic"
-								}
-							/>
-						)
-					}
-				/>
-				<Route
-					path="/warehouse"
-					element={
-						user?.role === "Warehouse" ? (
-							<WarehouseDashboard user={user} logout={logout} />
-						) : (
-							<Navigate to="/" />
-						)
-					}
-				/>
-				<Route
-					path="/clinic"
-					element={
-						user?.role === "Clinic" ? (
-							<ClinicDashboard user={user} logout={logout} />
-						) : (
-							<Navigate to="/" />
-						)
-					}
-				/>
-				<Route
-					path="/admin"
-					element={
-						user?.role === "Admin" ? (
-							<AdminDashboard user={user} logout={logout} />
-						) : (
-							<Navigate to="/" />
-						)
-					}
-				/>
-				<Route path="*" element={<NotFound />} />
-			</Routes>
-		</Router>
+		<main className="min-h-screen bg-slate-50">
+			{/* 1. Global Loading State (Session Check) */}
+			{isVerifying ? (
+			<div className="min-h-screen flex flex-col items-center justify-center">
+				<div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+				<p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+				Authenticating...
+				</p>
+			</div>
+			) : !user ? (
+			/* 2. Login View (If no user is authenticated) */
+			<Login setUser={setUser} />
+			) : (
+			/* 3. Dashboard View (Based on Role) */
+			<>
+				{user.role === "Clinic" && (
+				<ClinicDashboard user={user} logout={handleLogout} />
+				)}
+				
+				{user.role === "Warehouse" && (
+				<WarehouseDashboard user={user} logout={handleLogout} />
+				)}
+				
+				{user.role === "Admin" && (
+				<AdminDashboard user={user} logout={handleLogout} />
+				)}
+				
+				{/* ✅ The "Not Found" Fallback 
+					If the role isn't any of the above, show your NotFound component */}
+				{!["Clinic", "Warehouse", "Admin"].includes(user.role) && (
+				<NotFound logout={handleLogout} />
+				)}
+			</>
+			)}
+		</main>
 	);
 }
