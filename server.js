@@ -5,6 +5,7 @@ import axios from "axios";
 import * as jose from "jose";
 import multer, { memoryStorage } from "multer";
 import pdf from "pdf-parse";
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf';
 
 import jwtAuth from "./middleware/jwtAuth";
 import notFound from "./middleware/notFound";
@@ -13,6 +14,7 @@ import logger from "./utils/logger";
 
 const PORT = process.env.PORT || 3000;
 const GOOGLE_URL = process.env.GOOGLE_SCRIPT_URL;
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 
 if (!GOOGLE_URL) {
 	logger.fatal("Missing GOOGLE_SCRIPT_URL environment variable. Exiting");
@@ -176,68 +178,160 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
     }
 });
 
-// --- FIX: Update the PDF Regex (The "Block-Based" Parser) ---
+
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
 
-        // 1. EXTRACT: Get raw text from PDF
-        const data = await pdf(req.file.buffer);
-        const rawText = data.text;
+        const data = new Uint8Array(req.file.buffer);
+        
+        // Disable font face to prevent the 'standardFontDataUrl' warning/error
+        const loadingTask = pdfjsLib.getDocument({ 
+            data, 
+            disableFontFace: true, 
+            verbosity: 0 
+        });
+        const pdf = await loadingTask.promise;
+        
+        let results = [];
 
-        // 2. FIND ALL CODES: Create a list of where every item starts
-        const codeRegex = /\d{3}-\d{3}-\d{3}-\d{4}/g;
-        const itemAnchors = [];
-        let match;
-        while ((match = codeRegex.exec(rawText)) !== null) {
-            itemAnchors.push({ code: match[0], index: match.index });
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            // 1. Group items by their Y-coordinate (Row alignment)
+            const rows = {};
+            textContent.items.forEach(item => {
+                const y = Math.round(item.transform[5]);
+                // Use a 5-pixel tolerance for rows that aren't perfectly straight
+                const rowKey = Object.keys(rows).find(key => Math.abs(key - y) <= 5) || y;
+                if (!rows[rowKey]) rows[rowKey] = [];
+                rows[rowKey].push({
+                    str: item.str.trim(),
+                    x: item.transform[4]
+                });
+            });
+
+            const QTY_X_THRESHOLD = 450; // tweak if needed
+
+            // 2. Sort rows from top to bottom
+            const sortedY = Object.keys(rows)
+                .map(Number)
+                .sort((a, b) => b - a);
+            
+            let currentItem = null;
+
+            let rowList = sortedY.map(y => ({
+                y,
+                items: rows[y].sort((a, b) => a.x - b.x).filter(i => i.str !== "")
+            }));
+
+            for (let idx = 0; idx < rowList.length; idx++) {
+                const row = rowList[idx];
+                const fullRowText = row.items.map(i => i.str).join(" ");
+
+                const codeMatch = fullRowText.match(/(\d{3}-\d{3}-\d{3}-\d{4})/);
+
+                if (codeMatch) {
+                    const code = codeMatch[1];
+
+                    let nameParts = [];
+                    let quantity = 0;
+
+                    for (let j = idx; j < Math.min(idx + 6, rowList.length); j++) {
+                        const nextRow = rowList[j];
+
+                        const leftTexts = [];
+                        const rightNums = [];
+
+                        nextRow.items.forEach(item => {
+                            const clean = item.str.replace(/[^\d]/g, '');
+
+                            if (item.x > QTY_X_THRESHOLD && clean.length > 0) {
+                                rightNums.push(parseInt(clean, 10));
+                            } else {
+                                leftTexts.push(item.str);
+                            }
+                        });
+
+                        let rowText = leftTexts.join(" ").trim();
+                        // 🔥 Remove full code
+                        rowText = rowText.replace(code, '').trim();
+
+                        // 🔥 Remove partial code fragments
+                        rowText = rowText.replace(/\b\d{3}-\d{3}-\d{3}-?\b/g, '').trim();
+
+                        // 🔥 Remove trailing numbers
+                        rowText = rowText.replace(/(\d+\s*)+$/, '').trim();
+
+                        // ❌ Skip useless fragments like "S)" or "/TUDUNG)"
+                        if (rowText.length <= 3) continue;
+
+                        // ✅ Found quantity row
+                        if (rightNums.length >= 1) {
+                            quantity = rightNums[rightNums.length - 1];
+
+                            if (rowText) nameParts.push(rowText);
+                            break;
+                        }
+
+                        // ✅ Otherwise part of name
+                        if (
+                            rowText &&
+                            !rowText.includes("Pemohon") &&
+                            !rowText.includes("Tarikh") &&
+                            !rowText.includes(code)
+                        ) {
+                            // 🔥 If previous line ends with "(" → merge
+                            if (
+                                nameParts.length > 0 &&
+                                nameParts[nameParts.length - 1].endsWith("(")
+                            ) {
+                                nameParts[nameParts.length - 1] += " " + rowText;
+                            } 
+                            // 🔥 If this line starts with ")" → merge backward
+                            else if (rowText.startsWith(")") && nameParts.length > 0) {
+                                nameParts[nameParts.length - 1] += rowText;
+                            }
+                            else {
+                                nameParts.push(rowText);
+                            }
+                        }
+                    }
+
+                    let finalName = nameParts
+                        .join(' ')
+                        .replace(/\s+/g, ' ')
+                        .replace(/\(\s+/g, '(')
+                        .replace(/\s+\)/g, ')')
+                        .trim();
+
+                    results.push({
+                        code,
+                        name: nameParts.join(" ").replace(/\s+/g, ' ').trim(),
+                        quantity
+                    });
+                }
+            }
         }
 
-        // 3. PROCESS BLOCKS: Extract data between anchors
-        const results = itemAnchors.map((anchor, i) => {
-            const start = anchor.index;
-            // The block ends where the next item starts, or at the end of the text
-            const end = itemAnchors[i + 1] ? itemAnchors[i + 1].index : rawText.length;
-            const block = rawText.substring(start, end);
+        // Final cleanup of names and filtering empty quantities
+        const cleanResults = results
+            .filter(item => item.quantity > 0)
+            .map(item => ({
+                ...item,
+                name: item.name.replace(/\s+/g, ' ').trim()
+            }));
 
-            // 4. EXTRACT NUMBERS: Find every standalone number in this block
-            const allNumbers = block.match(/\d+/g) || [];
-            
-            // POKA-YOKE: Filter out numbers that are part of the Item Code itself
-            const codeParts = anchor.code.split('-');
-            const dataNumbers = allNumbers.filter(n => !codeParts.includes(n));
-
-            // 5. QUANTITY LOGIC: In KEW.PS-8, "Kuantiti Diterima" is the LAST number in the sequence
-            // This works even if the description contains numbers like "10BX" or "1 pkt"
-            const quantity = dataNumbers.length > 0 
-                ? parseInt(dataNumbers[dataNumbers.length - 1], 10) 
-                : 0;
-
-            // 6. NAME LOGIC: Extract the description
-            // We take the block and split it at the first comma/quote that starts the quantity columns
-            let name = block.replace(anchor.code, '').trim();
-            const nameMatch = name.match(/^[\s\S]+?(?="|,|\n\s*\d+)/);
-            name = nameMatch ? nameMatch[0] : name.split(/\n/)[0];
-            
-            name = name
-                .replace(/[,"'\n\r]/g, ' ') // Clean PDF artifacts
-                .replace(/\s+/g, ' ')      // Clean extra spaces
-                .trim();
-
-            return { code: anchor.code, name, quantity };
-        }).filter(item => item.quantity > 0);
-
-        // 7. SUCCESS CHECK
-        if (results.length === 0) {
-            console.warn("⚠️ No items extracted. Raw text starts with:", rawText.substring(0, 200));
-            return res.status(400).json({ success: false, message: "No items detected in PDF." });
+        if (cleanResults.length === 0) {
+            return res.status(400).json({ success: false, message: "No items detected." });
         }
 
-        res.json({ success: true, transferred: results });
+        res.json({ success: true, transferred: cleanResults });
 
     } catch (err) {
-        console.error("❌ PDF Processing Crash:", err);
-        res.status(500).json({ success: false, error: "Server error during PDF processing" });
+        console.error("[BACKEND] PDF Grid Parse Error:", err);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
     }
 });
 
