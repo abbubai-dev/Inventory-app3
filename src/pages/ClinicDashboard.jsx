@@ -803,6 +803,72 @@ const ClinicDashboard = ({ user, logout }) => {
 												/>
 											</label>
 										</div>
+										{/* DIVIDER 3 */}
+										<div className="relative flex py-2 items-center">
+											<div className="grow border-t border-slate-100"></div>
+											<span className="shrink mx-4 text-[10px] font-black text-slate-300 uppercase">OR</span>
+											<div className="grow border-t border-slate-100"></div>
+										</div>
+
+										{/* 4. MANUAL ITEM ENTRY (KEW.PS-8 Style) */}
+										<div className="space-y-4">
+											<p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+												Option 4: Manual Item Entry
+											</p>
+											
+											<div className="grid grid-cols-1 gap-3 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+												<div>
+													<label className="text-[9px] font-bold text-slate-400 ml-2 mb-1 block">NO. KOD / PERIHAL STOK</label>
+													<input
+														type="text"
+														placeholder="e.g. 107-013... Glove Dental"
+														className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-medium"
+														id="manualItemNameCode"
+													/>
+												</div>
+												
+												<div className="flex gap-3">
+													<div className="flex-1">
+														<label className="text-[9px] font-bold text-slate-400 ml-2 mb-1 block">KUANTITI DITERIMA</label>
+														<input
+															type="number"
+															placeholder="0"
+															className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold"
+															id="manualItemQty"
+														/>
+													</div>
+													<div className="flex items-end">
+														<button
+															onClick={() => {
+																const rawNameCode = document.getElementById("manualItemNameCode").value;
+																const qty = document.getElementById("manualItemQty").value;
+																
+																if (!rawNameCode || !qty) return alert("Please fill in both fields");
+
+																// Extract code (first match) and name (rest of string)
+																const codeMatch = rawNameCode.match(/\d{3}-\d{3}-\d{3}-\d{4}/);
+																const code = codeMatch ? codeMatch[0] : "";
+																const name = rawNameCode.replace(code, "").trim();
+
+																handleManualPDFSubmit([{
+																	code: code,
+																	name: name || "Manual Entry",
+																	quantity: parseInt(qty, 10),
+																	unit: 1 // Default unit
+																}]);
+																
+																// Reset fields
+																document.getElementById("manualItemNameCode").value = "";
+																document.getElementById("manualItemQty").value = "";
+															}}
+															className="h-11.5 px-6 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-colors"
+														>
+															Add Stock
+														</button>
+													</div>
+												</div>
+											</div>
+										</div>
 									</div>
 								</div>
 							</div>
