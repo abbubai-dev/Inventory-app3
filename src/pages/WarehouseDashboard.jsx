@@ -39,194 +39,243 @@ const WarehouseDashboard = ({ logout }) => {
 
         // Use imported locations instead of extracting from inventory
         setClinics(clinicsConstanst);
-
         setInventory(invData || []);
-        // Store all transactions, but we will filter them in the UI
-        setAuditLog(histData.usage || []);
+
+        // ✅ FIXED: Assigned 'transfers' (Receipts/Adds) instead of 'usage' (Deductions)
+        setAuditLog(histData.transfers || []);
         
     } catch (err) {
         console.error("Sync Error:", err);
     } finally {
         setLoading(false);
     }
-};
+  };
 
   // --- LOGIC: Grouped Alerts ---
   const getGroupedAlerts = () => {
-    	let grouped = [];
+      let grouped = [];
+  
+      inventory.forEach(item => {
+          let clinicShortages = [];
+          const targetClinics = clinicFilter === "ALL" ? clinics : [clinicFilter];
     
-    	inventory.forEach(item => {
-      		let clinicShortages = [];
-      		const targetClinics = clinicFilter === "ALL" ? clinics : [clinicFilter];
+          targetClinics.forEach(loc => {
+              const stock = Number(item[loc]) || 0;
+              const min = Number(item.MinStock) || 0;
+              if (min > 0 && stock < min) {
+                  clinicShortages.push({ loc, stock });
+              }
+          });
+
+          if (clinicShortages.length > 0) {
+              grouped.push({
+                  name: item.Item_Name,
+                  code: item.Item_Code || item.Code, // Safety fallback for code mapping
+                  min: item.MinStock,
+                  shortages: clinicShortages
+              });
+          }
+      });
+      return grouped;
+  };
+
+  // --- LOGIC: Filtered & Grouped Audit (By Date and User) ---
+  const getGroupedAudit = () => {
+      let filtered = auditLog;
       
-      		targetClinics.forEach(loc => {
-        		const stock = Number(item[loc]) || 0;
-        		const min = Number(item.MinStock) || 0;
-        		if (min > 0 && stock < min) {
-          			clinicShortages.push({ loc, stock });
-        		}
-      		});
+      // ✅ FIXED: Using Location_To to filter who received the stock
+      if (clinicFilter !== "ALL") {
+          filtered = auditLog.filter(log => log.Location_To === clinicFilter);
+      }
 
-      		if (clinicShortages.length > 0) {
-        		grouped.push({
-          			name: item.Item_Name,
-          			code: item.Code,
-          			min: item.MinStock,
-          			shortages: clinicShortages
-        		});
-      		}
-    	});
-    	return grouped;
-	};
+      // Grouping engine: clusters logs with the same Date and User
+      const groups = {};
+      filtered.forEach(log => {
+          const dateStr = new Date(log.Timestamp).toLocaleDateString();
+          const user = log.User;
+          const groupKey = `${dateStr}_${user}`; // Unique cluster ID
 
-  	// --- LOGIC: Filtered Audit ---
-  	const getFilteredAudit = () => {
-    	if (clinicFilter === "ALL") return auditLog;
-    	return auditLog.filter(log => log.Location === clinicFilter);
-  	};
+          if (!groups[groupKey]) {
+              groups[groupKey] = {
+                  date: dateStr,
+                  user: user,
+                  logs: []
+              };
+          }
+          groups[groupKey].logs.push(log);
+      });
 
-	return (
-		<div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-24">
-      		<header className="bg-white p-6 border-b sticky top-0 z-20 flex justify-between items-center shadow-sm">
-        		<div>
-          			<h1 className="text-xl font-black text-slate-900 tracking-tight italic">KAWALAN INVENTORI</h1>
-          			<p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Stor dan Klinik</p>
-        		</div>
-        		<button onClick={logout} className="p-3 bg-slate-100 rounded-full text-slate-400 active:scale-90 transition">
-          			<LogOut size={20} />
-        		</button>
-      		</header>
+      // Returns array of grouped blocks
+      return Object.values(groups);
+  };
 
-      		<main className="p-4 space-y-4">
-        		{/* Tab Switcher */}
-        		<div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
-          			{['alerts', 'audit'].map((t) => (
-            			<button
-              				key={t}
-              				onClick={() => setView(t)}
-              				className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${view === t ? 'bg-white shadow-md text-blue-600' : 'text-slate-500'}`}
-            			>
-              				{t === 'alerts' ? 'LOW STOCK' : 'RECEIPTS'}
-            			</button>
-          			))}
-				</div>
+  return (
+      <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-24">
+          <header className="bg-white p-6 border-b sticky top-0 z-20 flex justify-between items-center shadow-sm">
+              <div>
+                  <h1 className="text-xl font-black text-slate-900 tracking-tight italic">KAWALAN INVENTORI</h1>
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Stor dan Klinik</p>
+              </div>
+              <button onClick={logout} className="p-3 bg-slate-100 rounded-full text-slate-400 active:scale-90 transition">
+                  <LogOut size={20} />
+              </button>
+          </header>
 
-				{/* Global Clinic Filter */}
-				<div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-					<label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Focus Location</label>
-					<select 
-            			value={clinicFilter}
-            			onChange={(e) => setClinicFilter(e.target.value)}
-            			className="w-full mt-2 p-3 bg-slate-50 border-0 rounded-2xl text-sm font-bold text-slate-800 outline-none"
-          			>
-            			<option value="ALL">ALL CLINICS (DISTRICT)</option>
-            			{clinics.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-          			</select>
-				</div>
+          <main className="p-4 space-y-4">
+              {/* Tab Switcher */}
+              <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
+                  {['alerts', 'audit'].map((t) => (
+                      <button
+                          key={t}
+                          onClick={() => setView(t)}
+                          className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${view === t ? 'bg-white shadow-md text-blue-600' : 'text-slate-500'}`}
+                      >
+                          {t === 'alerts' ? 'LOW STOCK' : 'RECEIPTS'}
+                      </button>
+                  ))}
+              </div>
 
-        		{/* --- VIEW: GROUPED ALERTS --- */}
-        		{view === 'alerts' && (
-          			<div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-            			{
-							getGroupedAlerts().length === 0 ? (
-              					<div className="bg-white p-12 rounded-[3rem] text-center border-2 border-dashed border-slate-200">
-                					<ShieldCheck size={48} className="mx-auto text-green-400 mb-4 opacity-20" />
-                					<p className="text-slate-400 text-xs font-black uppercase">Inventory Healthy</p>
-								</div>
-            				) : (
-							getGroupedAlerts().map((item, i) => (
-								<div key={i} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-									<div className="p-5 bg-slate-50/50 border-b border-slate-50">
-										<p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ITEM CODE: {item.code}</p>
-										<h3 className="text-sm font-black text-slate-800">{item.name}</h3>
-										<p className="text-[10px] font-bold text-red-500 mt-1">Min. Requirement: {item.min}</p>
-									</div>
-									<div className="p-4 space-y-2">
-										{item.shortages.map((s, idx) => (
-											<div key={idx} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-50 shadow-xs">
-												<span className="text-xs font-black text-slate-600 uppercase">{s.loc}</span>
-												<div className="flex items-center gap-2">
-													<span className="text-xs font-black text-red-600">{s.stock}</span>
-													<div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse"></div>
-												</div>
-											</div>
-										))}
-									</div>
-								</div>
-              				))
-						)}
-					</div>
-				)}
+              {/* Global Clinic Filter */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Focus Location</label>
+                  <select 
+                      value={clinicFilter}
+                      onChange={(e) => setClinicFilter(e.target.value)}
+                      className="w-full mt-2 p-3 bg-slate-50 border-0 rounded-2xl text-sm font-bold text-slate-800 outline-none"
+                  >
+                      <option value="ALL">ALL CLINICS (DISTRICT)</option>
+                      {clinics.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  </select>
+              </div>
 
-        		{/* --- VIEW: AUDIT RECEIPTS --- */}
-        		{view === 'audit' && (
-					<div className="space-y-3 animate-in fade-in">
-						{getFilteredAudit().map((log, i) => {
-							// ✅ DEFINE VISUAL SIGNALS BASED ON STATUS
-							const isAddition = log.Status === "Add" || log.Status === "TransferIn";
-							const isUsage = log.Status === "Used";
-							const isTransfer = log.Status?.includes("Transfer");
+              {/* --- VIEW: GROUPED ALERTS --- */}
+              {view === 'alerts' && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                      {
+                          getGroupedAlerts().length === 0 ? (
+                              <div className="bg-white p-12 rounded-[3rem] text-center border-2 border-dashed border-slate-200">
+                                  <ShieldCheck size={48} className="mx-auto text-green-400 mb-4 opacity-20" />
+                                  <p className="text-slate-400 text-xs font-black uppercase">Inventory Healthy</p>
+                              </div>
+                          ) : (
+                          getGroupedAlerts().map((item, i) => (
+                              <div key={i} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                                  <div className="p-5 bg-slate-50/50 border-b border-slate-50">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ITEM CODE: {item.code}</p>
+                                      <h3 className="text-sm font-black text-slate-800">{item.name}</h3>
+                                      <p className="text-[10px] font-bold text-red-500 mt-1">Min. Requirement: {item.min}</p>
+                                  </div>
+                                  <div className="p-4 space-y-2">
+                                      {item.shortages.map((s, idx) => (
+                                          <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-50 shadow-xs">
+                                              <span className="text-xs font-black text-slate-600 uppercase">{s.loc}</span>
+                                              <div className="flex items-center gap-2">
+                                                  <span className="text-xs font-black text-red-600">{s.stock}</span>
+                                                  <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse"></div>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))
+                      )}
+                  </div>
+              )}
 
-							return (
-								<div key={i} className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-start gap-4">
-									{/* Icon Logic */}
-									<div className={`p-3 rounded-2xl ${
-										isAddition ? "bg-green-50 text-green-600" : 
-    									isTransfer ? "bg-blue-50 text-blue-600" :
-										isUsage ? "bg-orange-50 text-orange-600" : 
-										"bg-blue-50 text-blue-600"
-									}`}>
-										{isAddition && <FilePlus size={20} />}
-										{isTransfer && <Repeat size={20} />}      {/* ✅ New Icon for transfers */}
-										{isUsage && <Activity size={20} />}
-									</div>
+              {/* --- VIEW: AUDIT RECEIPTS (Grouped by Date & User) --- */}
+              {view === 'audit' && (
+                  <div className="space-y-6 animate-in fade-in">
+                      {getGroupedAudit().length === 0 ? (
+                           <div className="bg-white p-12 rounded-[3rem] text-center border-2 border-dashed border-slate-200">
+                               <Activity size={48} className="mx-auto text-blue-400 mb-4 opacity-20" />
+                               <p className="text-slate-400 text-xs font-black uppercase">No Receipts Found</p>
+                           </div>
+                      ) : (
+                          getGroupedAudit().map((group, gIdx) => (
+                              <div key={gIdx} className="space-y-3">
+                                  
+                                  {/* ✅ NEW: Clean Group Header */}
+                                  <div className="flex items-center gap-2 pl-4 pt-2">
+                                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                          {group.date} <span className="text-slate-300 mx-1">•</span> BATCH BY {group.user}
+                                      </h3>
+                                  </div>
 
-									<div className="flex-1">
-										<div className="flex justify-between text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
-											<span>{log.TxnID}</span>
-											<span>{new Date(log.Timestamp).toLocaleDateString()}</span>
-										</div>
-										
-										<h4 className="text-xs font-black text-slate-700">{log.Item_Name}</h4>
-										
-										{/* THE FLOW: FROM -> TO */}
-										<div className="flex items-center gap-2 mt-2">
-											<span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{log.Location_From}</span>
-											<span className="text-slate-300">→</span>
-											<span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{log.Location_To}</span>
-										</div>
+                                  {group.logs.map((log, i) => {
+                                      const isAddition = log.Status === "Add" || log.Status === "TransferIn";
+                                      const isTransfer = log.Status?.includes("Transfer") || log.Status === "Pending";
 
-										<div className={`flex justify-between items-center mt-3 p-2 px-3 rounded-xl border ${
-											isAddition ? "bg-green-50/50 border-green-100" : "bg-slate-50/50 border-slate-100"
-										}`}>
-											<span className={`text-[10px] font-black ${isAddition ? "text-green-700" : "text-slate-700"}`}>
-												{isAddition ? "+" : "-"} {log.Total_Items} ITEMS
-											</span>
-											<span className="text-[9px] font-bold text-slate-400 uppercase">BY {log.User}</span>
-										</div>
-									</div>
-								</div>
-							);
-						})}
-					</div>
-				)}
-			</main>
+                                      return (
+                                          <div key={i} className="bg-white p-5 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-start gap-4">
+                                              
+                                              {/* Icon Logic */}
+                                              <div className={`p-3 rounded-2xl ${
+                                                  isAddition ? "bg-green-50 text-green-600" : 
+                                                  isTransfer ? "bg-blue-50 text-blue-600" :
+                                                  "bg-slate-50 text-slate-600"
+                                              }`}>
+                                                  {isAddition ? <FilePlus size={20} /> : <Repeat size={20} />}
+                                              </div>
 
-      		{/* Footer Nav / Quick Refresh */}
-      		<footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t p-4 px-8 flex justify-between items-center shadow-2xl z-30">
-				<div className="flex flex-col">
-					<p className="text-[9px] font-black text-slate-400 uppercase leading-none">Status</p>
-					<p className="text-xs font-bold text-green-600 flex items-center gap-1">Live <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span></p>
-				</div>
-				<button 
-          			onClick={fetchDistrictData}
-          			className={`p-4 bg-slate-900 text-white rounded-2xl active:scale-95 transition-all shadow-lg ${loading ? 'animate-spin' : ''}`}
-        		>
-          			<Search size={20} />
-        		</button>
-			</footer>
-    	</div>
-	);
+                                              <div className="flex-1">
+                                                  <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">
+                                                      <span>{log.TxnID}</span>
+                                                      
+                                                      {/* Status Tag */}
+                                                      <span className={`px-2 py-0.5 rounded-md ${
+                                                          log.Status === 'Pending' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'
+                                                      }`}>
+                                                          {log.Status}
+                                                      </span>
+                                                  </div>
+                                                  
+                                                  <h4 className="text-xs font-black text-slate-700">{log.Item_Name}</h4>
+                                                  
+                                                  {/* THE FLOW: FROM -> TO */}
+                                                  <div className="flex items-center gap-2 mt-2">
+                                                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                          {log.Location_From || "EXTERNAL"}
+                                                      </span>
+                                                      <span className="text-slate-300">→</span>
+                                                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                          {log.Location_To}
+                                                      </span>
+                                                  </div>
+
+                                                  <div className={`flex justify-between items-center mt-3 p-2 px-3 rounded-xl border ${
+                                                      isAddition ? "bg-green-50/50 border-green-100" : "bg-blue-50/50 border-blue-100"
+                                                  }`}>
+                                                      <span className={`text-[10px] font-black ${isAddition ? "text-green-700" : "text-blue-700"}`}>
+                                                          + {log.Total_Items} ITEMS
+                                                      </span>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+                          ))
+                      )}
+                  </div>
+              )}
+          </main>
+
+          {/* Footer Nav / Quick Refresh */}
+          <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t p-4 px-8 flex justify-between items-center shadow-2xl z-30">
+              <div className="flex flex-col">
+                  <p className="text-[9px] font-black text-slate-400 uppercase leading-none">Status</p>
+                  <p className="text-xs font-bold text-green-600 flex items-center gap-1">Live <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span></p>
+              </div>
+              <button 
+                  onClick={fetchDistrictData}
+                  className={`p-4 bg-slate-900 text-white rounded-2xl active:scale-95 transition-all shadow-lg ${loading ? 'animate-spin' : ''}`}
+              >
+                  <Search size={20} />
+              </button>
+          </footer>
+      </div>
+  );
 };
 
 export default WarehouseDashboard;
