@@ -26,3 +26,4 @@ dist-ssr
 # Local Netlify folder
 .netlify
 fix-credentials.js
+seed-users.js
