@@ -918,25 +918,26 @@ async function runHistoryMigration() {
 
             // C. Poka-Yoke: Skip if core structural dependencies do not exist in system
             if (!item || !loc || !user) {
-            console.warn(
-                `⚠️ Skipping ${log.txnID}`,
-                {
-                    itemFound: !!item,
-                    locationFound: !!loc,
-                    userFound: !!user,
-                    code: log.code,
-                    location: log.location,
-                    username: log.username
-                }
-            );
+                console.warn(
+                    `⚠️ Skipping ${log.txnID}`,
+                    {
+                        itemFound: !!item,
+                        locationFound: !!loc,
+                        userFound: !!user,
+                        code: log.code,
+                        location: log.location,
+                        username: log.username
+                    }
+                );
 
-            skipCount++;
-            continue;
-        }
+                skipCount++;
+                continue;
+            }
 
             // D. Insert row using ON CONFLICT protection to make it safe to re-run
             await sql`
                 INSERT INTO transactions (
+                    id, -- ✅ FIXED: Added target ID column
                     item_id,
                     location_id,
                     from_location_id,
@@ -947,6 +948,7 @@ async function runHistoryMigration() {
                     timestamp
                 )
                 VALUES (
+                    ${log.txnID}, -- ✅ FIXED: Passed transaction ID data map asset
                     ${item.id},
                     ${loc.id},
                     ${fromLocId},
@@ -956,6 +958,7 @@ async function runHistoryMigration() {
                     ${log.status},
                     ${parseDate(log.oldDate)}
                 )
+                ON CONFLICT (id) DO NOTHING; -- ✅ FIXED: Added true conflict safeguard handler
             `;
             
             successCount++;
