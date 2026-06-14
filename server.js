@@ -118,11 +118,36 @@ app.post("/api/login", async (req, res) => {
             otpCache.set(user.email, { otp, expires: Date.now() + 300000 });
             
             // HANTAR EMEL OTP SEBENAR KEPADA PENGGUNA KLINIK
+            // HANTAR EMEL OTP SEBENAR KEPADA PENGGUNA KLINIK
             const mailOptions = {
-                from: `"KDIP System Alert" <${process.env.EMAIL_USER}>`,
+                from: `"Sistem KDIP" <${process.env.EMAIL_USER}>`,
                 to: user.email,
                 subject: `🔒 KDIP Secure Access Token: ${otp}`,
-                text: `Salam Sejahtera,\n\nYour security authentication token for accessing the KDIP platform is: ${otp}\n\nThis token is strictly confidential and valid for the next 5 minutes only. If you did not request this login session, please contact your systems supervisor immediately.`,
+                text: `Salam Sejahtera,\n\nYour security authentication token for accessing the KDIP SYSTEM is: ${otp}\n\nThis token is strictly confidential and valid for the next 5 minutes only. If you did not request this login session, please contact your systems supervisor immediately.`,
+                html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <div style="background-color: #0f172a; padding: 25px; text-align: center;">
+                        <h2 style="color: #ffffff; margin: 0; font-size: 20px; letter-spacing: 2px;">KUALA KANGSAR DENTAL INVENTORY PLATFORM</h2>
+                        <p style="color: #94a3b8; margin: 5px 0 0 0; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Secure Authentication Gateway</p>
+                    </div>
+                    
+                    <div style="padding: 30px; background-color: #ffffff; color: #334155;">
+                        <p style="font-size: 16px; margin-top: 0;">Salam Sejahtera,</p>
+                        <p style="font-size: 15px; line-height: 1.6;">You have requested to log into the <strong>KDIP SYSTEM</strong>. Please use the secure authentication token below to complete your login sequence:</p>
+                        
+                        <div style="margin: 35px 0; padding: 25px; background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; text-align: center;">
+                            <span style="font-size: 38px; font-weight: 900; letter-spacing: 12px; color: #2563eb; font-family: monospace;">${otp}</span>
+                        </div>
+                        
+                        <p style="font-size: 14px; color: #ef4444; font-weight: bold;">⏳ This token is strictly confidential and expires in 5 minutes.</p>
+                        
+                        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.5;">
+                            <p style="margin: 0 0 10px 0;"><strong>SECURITY NOTICE:</strong> KDIP Administrators will <strong>never</strong> ask for your OTP. If you did not initiate this login request, please ignore this email and notify your district system supervisor immediately.</p>
+                            <p style="margin: 0; font-style: italic;">This is an automated message dispatched by the KDIP Node Engine. Please do not reply to this email.</p>
+                        </div>
+                    </div>
+                </div>
+                `
             };
 
             // Trigger the asynchronous mail blast
