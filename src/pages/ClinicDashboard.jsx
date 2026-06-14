@@ -267,35 +267,36 @@ const ClinicDashboard = ({ user, logout }) => {
 	};
 
 	const handleRefillRequest = async (items) => {
-		const token = localStorage.getItem("InventoryAppToken");
+        const token = localStorage.getItem("InventoryAppToken");
 
-		try {
-			setActionLoading(true);
-			await axios.post(
-				"/api/clinicaction",
-				{
-					action: "refillRequest",
-					location: String(user?.location || "").trim(),
-					items: items.map((i) => ({
-						name: i.Item_Name,
-						stock: i[user.location],
-					})),
-				},
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-					},
-				},
-			);
-			alert("Refill request sent to STOR via email.");
-			setShowLowStockModal(false);
-		} catch (error) {
-			console.error("Request failed:", error);
-			alert("Failed to send request.");
-		} finally {
-			setActionLoading(false);
-		}
-	};
+        try {
+            setActionLoading(true);
+            await axios.post(
+                "/api/clinicaction",
+                {
+                    action: "refillRequest",
+                    location: String(user?.location || "").trim(),
+                    // 🎯 POKA-YOKE: Accept either the raw database format OR the pre-mapped modal format
+                    items: items.map((i) => ({
+                        name: i.Item_Name || i.name || "Unknown Item",
+                        stock: i[user.location] !== undefined ? i[user.location] : i.current,
+                    })),
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                },
+            );
+            alert("Refill request sent to STOR via email.");
+            setShowLowStockModal(false);
+        } catch (error) {
+            console.error("Request failed:", error);
+            alert("Failed to send request.");
+        } finally {
+            setActionLoading(false);
+        }
+    };
 
 	const handlePDFSubmit = async (e) => {
 		const file = e.target.files[0];
@@ -1506,11 +1507,10 @@ const ClinicDashboard = ({ user, logout }) => {
 				</div>
 			)}
 
-			{/* ✅ PDF VERIFICATION MODAL (PLACED OUTSIDE VIEW*/}
+			{/* ✅ PDF VERIFICATION MODAL (PLACED OUTSIDE VIEW) */}
 			{pdfItems && (
 				<div className="fixed inset-0 bg-slate-900/70 z-10001 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-300">
 					<div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 border border-blue-50">
-						{/* Header: Clarity of Purpose */}
 						<div className="mb-6">
 							<h3 className="font-black text-slate-900 text-2xl tracking-tighter">Verify Receipt</h3>
 							<p className="text-[10px] text-blue-500 font-black uppercase tracking-[0.2em] mt-1">
@@ -1518,67 +1518,66 @@ const ClinicDashboard = ({ user, logout }) => {
 							</p>
 						</div>
 
-						{/* List Area: High Scannability */}
 						<div className="space-y-3 mb-8 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
-							{pdfItems.map((item, idx) => (
-								<div 
-									key={idx} 
-									className="p-4 bg-slate-50 rounded-4xl border border-slate-100 flex justify-between items-center gap-4 group hover:border-blue-200 transition-colors"
-								>
-									<div className="flex-1 min-w-0">
-										<h4 className="text-xs font-black text-slate-800 truncate leading-tight">
-											{item.name}
-										</h4>
-										<p className="text-[9px] font-mono font-bold text-slate-400 mt-1 uppercase tracking-wider">
-											Code: {item.code}
-										</p>
-									</div>
-									
-									{/* Editable Quantity Block: Visual Priority */}
-									<div className="flex flex-col items-end shrink-0">
-										<label className="text-[8px] font-black text-blue-400 uppercase mb-1 mr-1">
-											Qty Recv
-										</label>
-										<div className="relative">
-											<input
-												type="number"
-												value={item.quantity}
-												onChange={(e) => {
-													const newItems = [...pdfItems];
-													newItems[idx].quantity = Math.max(0, parseInt(e.target.value) || 0);
-													setPdfItems(newItems);
-												}}
-												className="w-20 p-3 bg-white border-2 border-blue-100 rounded-2xl text-center text-sm font-black text-blue-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
-											/>
-											{/* Small visual hint that this value will be processed */}
-											<div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>
+							{pdfItems.map((item, idx) => {
+								// 🎯 UI DETECTOR: Cross-reference local inventory state to check if code is completely new
+								const isNewItem = !inventory.some(i => String(i.Item_Code).trim() === String(item.code).trim());
+
+								return (
+									<div 
+										key={idx} 
+										className={`p-4 rounded-4xl border flex justify-between items-center gap-4 transition-colors ${
+											isNewItem 
+											? "bg-amber-50/60 border-amber-200 hover:border-amber-400" 
+											: "bg-slate-50 border-slate-100 hover:border-blue-200"
+										}`}
+									>
+										<div className="min-w-0 flex-1">
+											{isNewItem && (
+												<span className="inline-block text-[8px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md uppercase tracking-wider mb-1 animate-pulse">
+													✨ New Master Item Detected
+												</span>
+											)}
+											<h4 className="text-xs font-black text-slate-800 truncate leading-tight">
+												{item.name}
+											</h4>
+											<p className="text-[9px] font-mono font-bold text-slate-400 mt-1 registrar-code">
+												Code: {item.code}
+											</p>
+										</div>
+										
+										<div className="flex flex-col items-end shrink-0">
+											<label className="text-[8px] font-black text-blue-400 uppercase mb-1 mr-1">
+												Qty Recv
+											</label>
+											<div className="relative">
+												<input
+													type="number"
+													value={item.quantity}
+													onChange={(e) => {
+														const newItems = [...pdfItems];
+														newItems[idx].quantity = Math.max(0, parseInt(e.target.value) || 0);
+														setPdfItems(newItems);
+													}}
+													className="w-20 p-3 bg-white border-2 border-blue-100 rounded-2xl text-center text-sm font-black text-blue-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
+												/>
+											</div>
 										</div>
 									</div>
-								</div>
-							))}
+								);
+							})}
 						</div>
 
-						{/* Action Footer: Standardized Flow */}
 						<div className="space-y-3">
 							<button 
 								onClick={() => handleManualPDFSubmit(pdfItems)} 
 								disabled={actionLoading}
-								className="w-full py-5 bg-blue-600 text-white rounded-4xl font-black text-sm shadow-xl shadow-blue-100 flex items-center justify-center gap-3 active:scale-[0.97] transition-all disabled:opacity-50"
+								className="w-full py-5 bg-blue-600 text-white rounded-4xl font-black text-sm shadow-xl shadow-blue-100 flex items-center justify-center gap-3 active:scale-[0.97] transition-all"
 							>
-								{actionLoading ? (
-									<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-								) : (
-									<>
-										<CheckCircle size={20} />
-										CONFIRM & ADD TO SHELF
-									</>
-								)}
+								{actionLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "CONFIRM & ADD TO SHELF"}
 							</button>
 							
-							<button 
-								onClick={() => setPdfItems(null)} 
-								className="w-full py-3 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] active:scale-95 transition"
-							>
+							<button onClick={() => setPdfItems(null)} className="w-full py-3 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] text-center">
 								Discard Extract
 							</button>
 						</div>

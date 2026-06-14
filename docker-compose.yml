@@ -1,9 +1,27 @@
+version: '3.8'
+
 services:
   inventory-app:
     build: .
     container_name: inventory_system
     restart: always
-    # This line tells Docker to pull all variables from your .env file
     env_file: .env
     ports:
       - "3000:3000"
+
+  # 🐘 THE NEW POSTGRESQL DATABASE CONTAINER
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: kdip_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Clever1234
+      POSTGRES_DB: postgres # Default master landing database
+    ports:
+      - "5432:5432" # Maps internal port to your VPS external gateway
+    volumes:
+      - kdip_postgres_data:/var/lib/postgresql/data # ✅ FIXED: Pointed to official PG data directory
+
+volumes:
+  kdip_postgres_data: # Declares persistent named volume storage

@@ -1,11 +1,12 @@
 import path from "node:path";
 import compression from "compression";
 import express from "express";
-import axios from "axios";
 import * as jose from "jose";
 import multer, { memoryStorage } from "multer";
-import pdf from "pdf-parse";
-import * as pdfjs from 'pdfjs-dist/legacy/build/pdf';
+import nodemailer from "nodemailer";
+
+// 1. IMPORT SAMBUNGAN DATABASE KITA
+import sql from "./db";
 
 import jwtAuth from "./middleware/jwtAuth";
 import notFound from "./middleware/notFound";
@@ -13,14 +14,7 @@ import errorHandler from "./middleware/errorHandler";
 import logger from "./utils/logger";
 
 const PORT = process.env.PORT || 3000;
-const GOOGLE_URL = process.env.GOOGLE_SCRIPT_URL;
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
-
-if (!GOOGLE_URL) {
-	logger.fatal("Missing GOOGLE_SCRIPT_URL environment variable. Exiting");
-	process.exit(1);
-}
-
 const app = express();
 const upload = multer({ storage: memoryStorage() });
 
@@ -29,23 +23,61 @@ app.use(express.static(path.join(__dirname, "dist")));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// Login routes
+// Memori cache dalaman untuk menggantikan CacheService Google Apps Script bagi OTP
+const otpCache = new Map();
+
+// Clean up expired OTPs every minute automatically
+setInterval(() => {
+    const now = Date.now();
+    for (const [email, data] of otpCache.entries()) {
+        if (now > data.expires) otpCache.delete(email);
+    }
+}, 60000);
+
+// Konfigurasi Mesin Penghantar Emel Automatik (Nodemailer Transporter)
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+// Poka-Yoke verification verification on server boot
+transporter.verify((error) => {
+    if (error) {
+        logger.error("❌ Mail Engine Connection Failure Check Credentials:", error.message);
+    } else {
+        logger.info("🚀 Mail Engine Connected System Ready to route OTP & Alert requests.");
+    }
+});
+
+// =========================================================================
+// ROUTE UTAMA & AUTHENTICATION (POSTGRES MIGRATED)
+// =========================================================================
+
 app.get("/api/getusers", async (_req, res) => {
-	logger.info("Received getusers request");
+    logger.info("Received getusers request");
+    try {
+        // 1. Get users matching the frontend structure
+        const users = await sql`
+            SELECT u.username, l.location_name as location 
+            FROM users u
+            LEFT JOIN locations l ON u.location_id = l.id
+        `;
+        
+        // 2. Fetch raw locations from Postgres
+        const dbLocations = await sql`SELECT location_name FROM locations`;
 
-	const { data: allUsers } = await axios.get(
-		`${GOOGLE_URL}?action=getLoginData`,
-	);
+        // 3. Poka-Yoke: Flatten the objects into a clean array of strings
+        const locations = dbLocations.map(l => l.location_name);
 
-	const toSendToFrontend = {
-		users: allUsers.users.map((user) => ({
-			username: user.username,
-			location: user.location,
-		})),
-		locations: allUsers.locations,
-	};
-
-	res.json(toSendToFrontend);
+        // 4. Send it over in the exact shape the frontend expects
+        res.json({ users, locations });
+    } catch (err) {
+        logger.error("Error in getusers:", err.message);
+        res.status(500).json({ error: "Database Error" });
+    }
 });
 
 app.post("/api/login", async (req, res) => {
@@ -55,155 +87,418 @@ app.post("/api/login", async (req, res) => {
     if (!username || !password || !selectedLoc)
         return res.status(400).json({ error: "Bad Request" });
 
-    const { data: loginData } = await axios.get(`${GOOGLE_URL}?action=getLoginData`);
-    const currentUser = loginData.users.find((user) => user.username === username);
+    try {
+        // 1. Use LOWER() to make the username lookup case-insensitive
+        const [user] = await sql`
+            SELECT u.*, l.location_name 
+            FROM users u
+            LEFT JOIN locations l ON u.location_id = l.id
+            WHERE LOWER(u.username) = LOWER(${username})
+        `;
 
-    if (!currentUser) return res.status(404).json({ error: "Not Found" });
+        if (!user) return res.status(404).json({ error: "User Not Found" });
 
-    // Inform Google of the login attempt
-    await axios.get(`${GOOGLE_URL}?action=login&user=${currentUser.username}&pass=${password}&loc=${selectedLoc}`);
+        // 2. Enforce Location Safety: Selected dropdown must match their database profile
+        if (user.location_name !== selectedLoc) {
+            logger.warn(`User ${username} tried to log into unauthorized location: ${selectedLoc}`);
+            return res.status(401).json({ error: "Unauthorized Location Access" });
+        }
 
-    // ✅ BYPASS: Only send OTP if the role is Clinic
-    const isClinic = currentUser.role === "Clinic";
-    if (isClinic) {
-        await axios.get(
-            `${GOOGLE_URL}?action=sendOTP&user=${encodeURIComponent(currentUser.username)}&email=${encodeURIComponent(currentUser.email)}`
-        );
+        // 3. Match the password hash using Bun's native verifier
+        const isMatch = await Bun.password.verify(password, user.password_hash);
+        if (!isMatch) return res.status(401).json({ error: "Unauthorized Password" });
+
+        const isClinic = user.role === "Clinic";
+        
+        if (isClinic) {
+            // Janakan 6 digit OTP ringkas
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            // Simpan dalam cache memori lokal selama 5 minit
+            otpCache.set(user.email, { otp, expires: Date.now() + 300000 });
+            
+            // HANTAR EMEL OTP SEBENAR KEPADA PENGGUNA KLINIK
+            const mailOptions = {
+                from: `"KDIP System Alert" <${process.env.EMAIL_USER}>`,
+                to: user.email,
+                subject: `🔒 KDIP Secure Access Token: ${otp}`,
+                text: `Salam Sejahtera,\n\nYour security authentication token for accessing the KDIP platform is: ${otp}\n\nThis token is strictly confidential and valid for the next 5 minutes only. If you did not request this login session, please contact your systems supervisor immediately.`,
+            };
+
+            // Trigger the asynchronous mail blast
+            transporter.sendMail(mailOptions)
+                .then(() => logger.info(`[MAIL DELIVERY] OTP token successfully pushed to ${user.email}`))
+                .catch(err => logger.error(`[MAIL ERROR] Failed pushing login token to ${user.email}:`, err.message));
+        }
+
+        // 4. Send clean response back to your React frontend
+        res.json({ success: true, otpSkipped: !isClinic });
+    } catch (err) {
+        logger.error("Error in login:", err.message);
+        res.status(500).json({ error: "Database Error" });
     }
-
-    // We send a flag 'otpSkipped' so the frontend knows whether to show the OTP screen
-    res.json({ success: true, otpSkipped: !isClinic });
 });
 
 app.post("/api/verifyotp", async (req, res) => {
     const { username, otp } = req.body;
 
-    const { data: loginData } = await axios.get(`${GOOGLE_URL}?action=getLoginData`);
-    const currentUser = loginData.users.find((u) => u.username === username);
+    try {
+        // 🎯 POKA-YOKE: Explicitly select u.id to guarantee it maps to your JavaScript object
+        const [user] = await sql`
+            SELECT u.id, u.username, u.email, u.role, l.location_name as location 
+            FROM users u
+            LEFT JOIN locations l ON u.location_id = l.id
+            WHERE LOWER(u.username) = LOWER(${username})
+        `;
+        
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-    if (!currentUser) return res.status(401).json({ error: "Unauthorized" });
+        if (user.role === "Clinic") {
+            const cachedData = otpCache.get(user.email);
+            const now = Date.now();
 
-    // ✅ BYPASS: Only verify OTP for Clinics
-    if (currentUser.role === "Clinic") {
-        const { data: otpResult } = await axios.get(
-            `${GOOGLE_URL}?action=verifyOTP&email=${encodeURIComponent(currentUser.email)}&otp=${otp}`
-        );
-
-        if (!otpResult || otpResult.status === "error" || otpResult.success === false) {
-            return res.status(401).json({ error: "Invalid OTP" });
+            if (!cachedData || cachedData.otp !== otp || now > cachedData.expires) {
+                return res.status(401).json({ error: "Invalid or Expired OTP" });
+            }
+            otpCache.delete(user.email);
         }
+
+        // Now user.id is 100% guaranteed to exist!
+        const userPayload = {
+            id: user.id, 
+            username: user.username,
+            role: user.role,
+            location: user.location,
+        };
+
+        const token = await new jose.SignJWT(userPayload)
+            .setProtectedHeader({ alg: "HS256" })
+            .setIssuedAt()
+            .setExpirationTime("9h")
+            .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+
+        res.json({ success: true, token, user: userPayload });
+    } catch (err) {
+        logger.error("Error in verifyotp:", err.message);
+        res.status(500).json({ error: "Database Error" });
     }
-
-    // Create user object and JWT
-    const user = {
-        username: currentUser.username,
-        role: currentUser.role,
-        location: currentUser.location,
-    };
-
-    const token = await new jose.SignJWT(user)
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("9h")
-        .sign(new TextEncoder().encode(process.env.JWT_SECRET));
-
-    res.json({ success: true, token, user });
 });
 
-// Auth routes
 app.get("/api/whoami", jwtAuth, async (req, res) => {
-	logger.info("Received whoami request");
-
-	res.json(req.user);
+    logger.info("Received whoami request");
+    res.json(req.user);
 });
 
-// Warehouse & Clinic routes
+// =========================================================================
+// WAREHOUSE & CLINIC ACTIONS (MANUAL ENTRY / CHECKOUT STOK)
+// =========================================================================
+
 app.post("/api/checkout", jwtAuth, async (req, res) => {
-	logger.info("Received checkout request", req.body);
+    logger.info("Received checkout request", req.body);
 
-	if (req.user.role !== "Warehouse" && req.user.role !== "Clinic")
-		return res.status(403).json({ error: "Forbidden" });
-
-	const { data: checkoutResponse } = await axios.post(
-		`${GOOGLE_URL}`,
-		req.body,
-	);
-
-	res.json(checkoutResponse);
-});
-
-// Admin routes
-app.get("/api/getfullusers", jwtAuth, async (req, res) => {
-	logger.info("Received getfullusers request");
-
-	if (req.user.role !== "Admin")
-		return res.status(403).json({ error: "Forbidden" });
-
-	const { data: allUsers } = await axios.get(
-		`${GOOGLE_URL}?action=getLoginData`,
-	);
-
-	res.json(allUsers.users);
-});
-app.get("/api/adduser", jwtAuth, async (req, res) => {
-	logger.info("Received adduser request");
-
-	if (req.user.role !== "Admin")
-		return res.status(403).json({ error: "Forbidden" });
-
-	await axios.post(`${GOOGLE_URL}`, req.body);
-
-	res.json({ success: true });
-});
-
-// Clinic routes
-app.post("/api/clinicaction", jwtAuth, async (req, res) => {
-    logger.info(`Received ${req.body.action} request`);
-
-    if (req.user.role !== "Clinic") {
+    if (req.user.role !== "Warehouse" && req.user.role !== "Clinic")
         return res.status(403).json({ error: "Forbidden" });
-    }
+
+    const { cart, location } = req.body; // Mengandungi array item checkout
 
     try {
-        const response = await axios.post(GOOGLE_URL, req.body);
+        await sql.begin(async (sql) => {
+            for (const item of cart) {
+                const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${item.code}`;
+                const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
+                
+                if (!itemData || !locData) continue;
 
-        //send only response.data
-        res.json(response.data);
-    } catch (error) {
-        logger.error("Proxy Error:", error.message); // use logger instead.check in app.log
-        res.status(500).json({
-            status: "error",
-            message: "Google Connection Failed"
+                // Tolak stok sedia ada
+                await sql`
+                    UPDATE stock 
+                    SET quantity = quantity - ${Number(item.qty)}
+                    WHERE item_id = ${itemData.id} AND location_id = ${locData.id}
+                `;
+
+                // Cipta sejarah transaksi audit log
+                await sql`
+                    INSERT INTO transactions (item_id, location_id, user_id, quantity, operation, status_override)
+                    VALUES (${itemData.id}, ${locData.id}, ${req.user.id}, ${Number(item.qty)}, 'deduct', 'Checkout')
+                `;
+            }
         });
+        res.json({ status: "success" });
+    } catch (err) {
+        logger.error("Checkout failed:", err.message);
+        res.status(500).json({ error: "Transaction Failed" });
     }
 });
 
+// =========================================================================
+// ADMIN MODUL OPERATIONS
+// =========================================================================
 
+app.get("/api/getfullusers", jwtAuth, async (req, res) => {
+    if (req.user.role !== "Admin") return res.status(403).json({ error: "Forbidden" });
+    
+    const users = await sql`
+        SELECT u.id, u.username, u.email, u.secondary_email, u.role, l.location_name as location 
+        FROM users u
+        LEFT JOIN locations l ON u.location_id = l.id
+    `;
+    res.json(users);
+});
+
+app.post("/api/adduser", jwtAuth, async (req, res) => {
+    logger.info("Received adduser form submission request");
+
+    if (req.user.role !== "Admin") 
+        return res.status(403).json({ error: "Forbidden" });
+
+    // 1. Capture the text string 'location' directly from your React form elements
+    const { username, email, location, password, role } = req.body;
+
+    try {
+        // 2. Resolve the text string to its autogenerated PostgreSQL integer ID
+        const [locData] = await sql`
+            SELECT id FROM locations WHERE location_name = ${location}
+        `;
+        
+        // Poka-Yoke: Safeguard against an invalid configuration drop
+        if (!locData) {
+            return res.status(400).json({ error: "Selected clinic location does not exist." });
+        }
+
+        // 3. Generate a secure, native hash signature for the new user profile
+        const hash = await Bun.password.hash(password, { algorithm: "bcrypt", cost: 10 });
+        
+        // 4. Execute the secure database row insertion
+        await sql`
+            INSERT INTO users (username, email, location_id, password_hash, role)
+            VALUES (${username}, ${email}, ${locData.id}, ${hash}, ${role})
+        `;
+        
+        res.json({ success: true });
+    } catch (err) {
+        logger.error("Failed to execute adduser routine:", err.message);
+        res.status(500).json({ error: "Failed to create new system user profile" });
+    }
+});
+
+app.get("/api/masteritems", jwtAuth, async (req, res) => {
+    if (req.user.role !== "Admin") return res.status(403).json({ error: "Forbidden" });
+    try {
+        // Fetch all items from the master repository regardless of active stock levels
+        const items = await sql`
+            SELECT item_code as "Item_Code", item_name as "Item_Name", 
+                   alias as "Alias", unit_multiplier as "Unit" 
+            FROM items
+            ORDER BY item_code ASC
+        `;
+        res.json(items);
+    } catch (err) {
+        logger.error("Failed to fetch master item repository:", err.message);
+        res.status(500).json({ error: "Database Error" });
+    }
+});
+
+// =========================================================================
+// CLINIC BACKEND ACTIONS (RECORD USAGE, TRANSEFER, CONFIRM RECEIPT)
+// =========================================================================
+
+app.post("/api/clinicaction", jwtAuth, async (req, res) => {
+    const { action, cart, location, txnId, items } = req.body;
+    logger.info(`[GATEWAY ACTION] Processing request type: ${action}`);
+
+    try {
+        // 🎯 CENTRAL FAIL-SAFE: Verify session username exists
+        if (!req.user || !req.user.username) {
+            logger.error("[Clinic Action Error] Access denied. No verified username attached to session.");
+            return res.status(401).json({ error: "Session invalid. Please log out and log back in." });
+        }
+
+        // 🎯 CENTRAL POKA-YOKE: Extract the absolute true database ID once for all actions below
+        const [dbUser] = await sql`
+            SELECT id FROM users WHERE LOWER(username) = LOWER(${req.user.username})
+        `;
+
+        if (!dbUser || !dbUser.id) {
+            logger.error(`[Clinic Action Error] Could not resolve database ID for user: ${req.user.username}`);
+            return res.status(401).json({ error: "User profile integrity check failed." });
+        }
+
+        const resolvedUserId = dbUser.id; // Fully verified ID ready for transaction insertions
+
+        // ==========================================
+        // ACTION A: Record Usage (Clinic Consumption)
+        // ==========================================
+        if (action === "recordUsage") {
+            const targetLocName = location || req.user.location;
+            if (!targetLocName) return res.status(400).json({ error: "Missing clinic location identifier." });
+
+            await sql.begin(async (sql) => {
+                for (const item of cart) {
+                    if (!item.code) continue;
+
+                    const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${item.code}`;
+                    const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${targetLocName}`;
+                    
+                    if (!itemData || !locData) {
+                        logger.warn(`[recordUsage Warning] Skipped Item Code: ${item.code} at Loc: ${targetLocName}. Missing in master tables.`);
+                        continue;
+                    }
+
+                    // Deduct from current clinic balance
+                    await sql`
+                        UPDATE stock SET quantity = quantity - ${Number(item.qty)}
+                        WHERE item_id = ${itemData.id} AND location_id = ${locData.id}
+                    `;
+
+                    // ✅ FIXED: Uses resolvedUserId securely here
+                    await sql`
+                        INSERT INTO transactions (item_id, location_id, user_id, quantity, operation, status_override)
+                        VALUES (${itemData.id}, ${locData.id}, ${resolvedUserId}, ${Number(item.qty)}, 'deduct', 'Used')
+                    `;
+                }
+            });
+            return res.json({ status: "success" });
+        }
+
+        // ==========================================
+        // ACTION B: Checkout (Initiate QR Transfer)
+        // ==========================================
+        if (action === "checkout") {
+            const targetTxnId = `TXN-${Math.floor(100000 + Math.random() * 900000)}`;
+            await sql.begin(async (sql) => {
+                for (const item of cart) {
+                    if (!item.code) continue;
+
+                    const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${item.code}`;
+                    const [fromLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.body.from}`;
+                    const [toLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.body.to}`;
+
+                    if (!itemData || !fromLoc || !toLoc) continue;
+
+                    // Deduct balance from sender immediately
+                    await sql`
+                        UPDATE stock SET quantity = quantity - ${Number(item.qty)}
+                        WHERE item_id = ${itemData.id} AND location_id = ${fromLoc.id}
+                    `;
+
+                    // ✅ FIXED: Uses resolvedUserId securely here
+                    await sql`
+                        INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
+                        VALUES (${targetTxnId}, ${itemData.id}, ${toLoc.id}, ${fromLoc.id}, ${resolvedUserId}, ${Number(item.qty)}, 'transfer', 'Pending')
+                    `;
+                }
+            });
+            return res.json({ status: "success", txnId: targetTxnId });
+        }
+
+        // ==========================================
+        // ACTION C: Confirm Receipt (Scan QR Scanner)
+        // ==========================================
+        if (action === "confirmReceipt") {
+            await sql.begin(async (sql) => {
+                const pendingItems = await sql`
+                    SELECT * FROM transactions WHERE id = ${txnId} AND status_override = 'Pending'
+                `;
+                
+                for (const item of pendingItems) {
+                    await sql`
+                        INSERT INTO stock (item_id, location_id, quantity)
+                        VALUES (${item.item_id}, ${item.location_id}, ${item.quantity})
+                        ON CONFLICT (item_id, location_id)
+                        DO UPDATE SET quantity = stock.quantity + EXCLUDED.quantity
+                    `;
+                }
+
+                // Complete the transfer lifecycle, tagging the operation with the user who scanned it
+                await sql`
+                    UPDATE transactions 
+                    SET status_override = 'TransferIn', user_id = ${resolvedUserId}, timestamp = NOW() 
+                    WHERE id = ${txnId}
+                `;
+            });
+            return res.json({ status: "success" });
+        }
+
+        // ==========================================
+        // ACTION D: Low Stock Email Request (Andon)
+        // ==========================================
+        if (action === "refillRequest") {
+            if (!items || items.length === 0) return res.status(400).json({ error: "No items passed" });
+
+            const formattedItemList = items.map(i => `• ${i.name} — (Current Balance: ${i.stock})`).join("\n");
+            const alertMailOptions = {
+                from: `"KDIP Automation" <${process.env.EMAIL_USER}>`,
+                to: process.env.STOR_MANAGER_EMAIL,
+                subject: `⚠️ REPLENISHMENT DEMAND: [${location}]`,
+                text: `Salam Store Manager,\n\nStock levels at Clinic ${location} have dropped below safety thresholds:\n\n${formattedItemList}`,
+            };
+
+            await transporter.sendMail(alertMailOptions);
+            return res.json({ status: "success" });
+        }
+
+        // ==========================================
+        // ACTION E: Process Digital Receipt (KEW.PS-8)
+        // ==========================================
+        if (action === "processReceipt") {
+            await sql.begin(async (sql) => {
+                for (const item of cart) {
+                    if (!item.code) continue;
+
+                    const [itemData] = await sql`SELECT id, unit_multiplier FROM items WHERE item_code = ${item.code}`;
+                    const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
+                    
+                    if (!itemData || !locData) continue;
+
+                    const totalToIncrement = Number(item.qty) * (itemData.unit_multiplier || 1);
+
+                    await sql`
+                        INSERT INTO stock (item_id, location_id, quantity)
+                        VALUES (${itemData.id}, ${locData.id}, ${totalToIncrement})
+                        ON CONFLICT (item_id, location_id)
+                        DO UPDATE SET quantity = stock.quantity + ${totalToIncrement}
+                    `;
+
+                    // ✅ FIXED: Uses resolvedUserId securely here
+                    await sql`
+                        INSERT INTO transactions (item_id, location_id, user_id, quantity, operation, status_override)
+                        VALUES (${itemData.id}, ${locData.id}, ${resolvedUserId}, ${totalToIncrement}, 'add', 'Add')
+                    `;
+                }
+            });
+            return res.json({ status: "success" });
+        }
+
+        res.status(400).json({ error: "Unknown action parameter profile value" });
+    } catch (err) {
+        logger.error(`[CRITICAL FAILURE] Interface operation run error [${action}]:`, err.message);
+        res.status(500).json({ error: "Internal processing crash sequence triggered." });
+    }
+});
+
+// =========================================================================
+// HIGH PRECISION GEOMETRY-AWARE PDF PARSER (KEKAL 100% ASAL)
+// =========================================================================
 app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
 
         const data = new Uint8Array(req.file.buffer);
-        
-        // Disable font face to prevent the 'standardFontDataUrl' warning/error
         const loadingTask = pdfjsLib.getDocument({ 
             data, 
             disableFontFace: true, 
             verbosity: 0 
         });
         const pdf = await loadingTask.promise;
-        
         let results = [];
 
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
             
-            // 1. Group items by their Y-coordinate (Row alignment)
             const rows = {};
             textContent.items.forEach(item => {
                 const y = Math.round(item.transform[5]);
-                // Use a 5-pixel tolerance for rows that aren't perfectly straight
                 const rowKey = Object.keys(rows).find(key => Math.abs(key - y) <= 5) || y;
                 if (!rows[rowKey]) rows[rowKey] = [];
                 rows[rowKey].push({
@@ -212,15 +507,9 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
                 });
             });
 
-            const QTY_X_THRESHOLD = 450; // tweak if needed
-
-            // 2. Sort rows from top to bottom
-            const sortedY = Object.keys(rows)
-                .map(Number)
-                .sort((a, b) => b - a);
+            const QTY_X_THRESHOLD = 450;
+            const sortedY = Object.keys(rows).map(Number).sort((a, b) => b - a);
             
-            let currentItem = null;
-
             let rowList = sortedY.map(y => ({
                 y,
                 items: rows[y].sort((a, b) => a.x - b.x).filter(i => i.str !== "")
@@ -229,24 +518,20 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
             for (let idx = 0; idx < rowList.length; idx++) {
                 const row = rowList[idx];
                 const fullRowText = row.items.map(i => i.str).join(" ");
-
                 const codeMatch = fullRowText.match(/(\d{3}-\d{3}-\d{3}-\d{4})/);
 
                 if (codeMatch) {
                     const code = codeMatch[1];
-
                     let nameParts = [];
                     let quantity = 0;
 
                     for (let j = idx; j < Math.min(idx + 6, rowList.length); j++) {
                         const nextRow = rowList[j];
-
                         const leftTexts = [];
                         const rightNums = [];
 
                         nextRow.items.forEach(item => {
                             const clean = item.str.replace(/[^\d]/g, '');
-
                             if (item.x > QTY_X_THRESHOLD && clean.length > 0) {
                                 rightNums.push(parseInt(clean, 10));
                             } else {
@@ -255,56 +540,28 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
                         });
 
                         let rowText = leftTexts.join(" ").trim();
-                        // 🔥 Remove full code
                         rowText = rowText.replace(code, '').trim();
-
-                        // 🔥 Remove partial code fragments
                         rowText = rowText.replace(/\b\d{3}-\d{3}-\d{3}-?\b/g, '').trim();
-
-                        // 🔥 Remove trailing numbers
                         rowText = rowText.replace(/(\d+\s*)+$/, '').trim();
 
-                        // ❌ Skip useless fragments like "S)" or "/TUDUNG)"
                         if (rowText.length <= 3) continue;
 
-                        // ✅ Found quantity row
                         if (rightNums.length >= 1) {
                             quantity = rightNums[rightNums.length - 1];
-
                             if (rowText) nameParts.push(rowText);
                             break;
                         }
 
-                        // ✅ Otherwise part of name
-                        if (
-                            rowText &&
-                            !rowText.includes("Pemohon") &&
-                            !rowText.includes("Tarikh") &&
-                            !rowText.includes(code)
-                        ) {
-                            // 🔥 If previous line ends with "(" → merge
-                            if (
-                                nameParts.length > 0 &&
-                                nameParts[nameParts.length - 1].endsWith("(")
-                            ) {
+                        if (rowText && !rowText.includes("Pemohon") && !rowText.includes("Tarikh") && !rowText.includes(code)) {
+                            if (nameParts.length > 0 && nameParts[nameParts.length - 1].endsWith("(")) {
                                 nameParts[nameParts.length - 1] += " " + rowText;
-                            } 
-                            // 🔥 If this line starts with ")" → merge backward
-                            else if (rowText.startsWith(")") && nameParts.length > 0) {
+                            } else if (rowText.startsWith(")") && nameParts.length > 0) {
                                 nameParts[nameParts.length - 1] += rowText;
-                            }
-                            else {
+                            } else {
                                 nameParts.push(rowText);
                             }
                         }
                     }
-
-                    let finalName = nameParts
-                        .join(' ')
-                        .replace(/\s+/g, ' ')
-                        .replace(/\(\s+/g, '(')
-                        .replace(/\s+\)/g, ')')
-                        .trim();
 
                     results.push({
                         code,
@@ -315,7 +572,6 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
             }
         }
 
-        // Final cleanup of names and filtering empty quantities
         const cleanResults = results
             .filter(item => item.quantity > 0)
             .map(item => ({
@@ -335,52 +591,82 @@ app.post("/api/processreceipt", jwtAuth, upload.single("invoice"), async (req, r
     }
 });
 
-// All route
+// =========================================================================
+// INVENTORY DAN SEJARAH DATA RETRIEVAL (POSTGRES MIGRATED)
+// =========================================================================
+
 app.get("/api/history", jwtAuth, async (req, res) => {
-	logger.info("Received getinventory request");
+    try {
+        const logs = await sql`
+            SELECT t.id as "TxnID", i.item_code as "Item_Code", i.item_name as "Item_Name", 
+                   fl.location_name as "Location_From", tl.location_name as "Location_To", 
+                   t.quantity as "Total_Items", t.operation, t.status_override as "Status", 
+                   t.timestamp as "Timestamp", u.username as "User"
+            FROM transactions t
+            JOIN items i ON t.item_id = i.id
+            JOIN locations tl ON t.location_id = tl.id
+            LEFT JOIN locations fl ON t.from_location_id = fl.id
+            JOIN users u ON t.user_id = u.id
+            ORDER BY t.timestamp DESC
+        `;
 
-	// FIX: Added Warehouse to the allowed roles
-    if (req.user.role !== "Admin" && req.user.role !== "Clinic" && req.user.role !== "Warehouse")
-        return res.status(403).json({ error: "Forbidden" });
+        // Separate entries based on transaction types to keep tracking distinct
+        const usage = logs.filter(log => log.Status === "Used");
+        const transfers = logs.filter(log => ["Pending", "TransferIn", "TransferOut", "Add"].includes(log.Status));
 
-    // Handle Admin/Warehouse who might not have a specific location in their JWT
-    const locationParam = req.user.location ? `&location=${req.user.location}` : "";
-
-    const { data: historyData } = await axios.get(
-        `${GOOGLE_URL}?action=getHistory${locationParam}`,
-    );
-    res.json(historyData);
+        res.json({ transfers, usage });
+    } catch (err) {
+        logger.error("Error in history structural split compilation:", err.message);
+        res.status(500).json({ error: "Failed to extract operational logs stack" });
+    }
 });
 
-// All route
 app.get("/api/getinventory", jwtAuth, async (req, res) => {
-	logger.info("Received getinventory request");
-
-	// FIX: Added Admin to the allowed roles
-    if (req.user.role !== "Warehouse" && req.user.role !== "Clinic" && req.user.role !== "Admin")
-        return res.status(403).json({ error: "Forbidden" });
-
-    const { data: inventoryData } = await axios.get(
-        `${GOOGLE_URL}?action=getInventory`,
-    );
-
-    res.json(inventoryData);
+    try {
+        const rawStock = await sql`
+            SELECT i.item_code as "Item_Code", i.item_name as "Item_Name", 
+                   i.alias as "Alias", l.location_name, s.quantity, s.min_stock as "MinStock"
+            FROM stock s
+            JOIN items i ON s.item_id = i.id
+            JOIN locations l ON s.location_id = l.id
+        `;
+        
+        // Pivot flat database rows into a combined object contract for the UI
+        const itemMap = {};
+        for (const row of rawStock) {
+            const code = row.Item_Code;
+            if (!itemMap[code]) {
+                itemMap[code] = {
+                    Item_Code: code,
+                    Item_Name: row.Item_Name,
+                    Alias: row.Alias,
+                    MinStock: row.MinStock
+                };
+            }
+            itemMap[code][row.location_name] = row.quantity;
+        }
+        
+        res.json(Object.values(itemMap));
+    } catch (err) {
+        logger.error("Error in getinventory pivot mapping:", err.message);
+        res.status(500).json({ error: "Failed to execute inventory metrics lookup" });
+    }
 });
 
-// Serve html on all routes other than the ones declared
+// Serve frontend build production
 app.use("/", (req, res, next) => {
-	if (req.method !== "GET") return next();
-	res.sendFile(path.join(__dirname, "dist", "index.html"));
+    if (req.method !== "GET") return next();
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 app.use(notFound);
 app.use(errorHandler);
 
 try {
-	app.listen(PORT, () => {
-		logger.info(`InventoryApp is running on port ${PORT}`);
-	});
+    app.listen(PORT, () => {
+        logger.info(`InventoryApp running natively on Postgres & Bun layer via port ${PORT}`);
+    });
 } catch (error) {
-	logger.error("Error starting server:", error);
-	process.exit(1);
+    logger.error("Error starting server:", error);
+    process.exit(1);
 }
