@@ -4,6 +4,7 @@ import express from "express";
 import * as jose from "jose";
 import multer, { memoryStorage } from "multer";
 import nodemailer from "nodemailer";
+import helmet from "helmet"; // 🎯 INJECT THIS: Import the security engine
 
 // 1. IMPORT SAMBUNGAN DATABASE KITA
 import sql from "./db";
@@ -17,6 +18,20 @@ const PORT = process.env.PORT || 3000;
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 const app = express();
 const upload = multer({ storage: memoryStorage() });
+
+// 🎯 INJECT THIS: Secure HTTP Headers configured for a React SPA
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"], // Allows React scripts
+            styleSrc: ["'self'", "'unsafe-inline'"],  // Allows React styling
+            imgSrc: ["'self'", "data:", "blob:"],     // Allows local images and PDFs
+            connectSrc: ["'self'"]                    // Allows your API calls
+        },
+    },
+    crossOriginEmbedderPolicy: false, // Prevents PDF parser from blocking
+}));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "dist")));
