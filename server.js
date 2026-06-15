@@ -19,19 +19,28 @@ const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 const app = express();
 const upload = multer({ storage: memoryStorage() });
 
-// 🎯 INJECT THIS: Secure HTTP Headers configured for a React SPA
+// 1. Helmet Security Headers (Kept exactly as is to keep React working)
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"], // Allows React scripts
-            styleSrc: ["'self'", "'unsafe-inline'"],  // Allows React styling
-            imgSrc: ["'self'", "data:", "blob:"],     // Allows local images and PDFs
-            connectSrc: ["'self'"]                    // Allows your API calls
+            scriptSrc: ["'self'", "'unsafe-inline'"], 
+            styleSrc: ["'self'", "'unsafe-inline'"],  
+            imgSrc: ["'self'", "data:", "blob:"],     
+            connectSrc: ["'self'"]                    
         },
     },
-    crossOriginEmbedderPolicy: false, // Prevents PDF parser from blocking
+    crossOriginEmbedderPolicy: false,
 }));
+
+// 2. 🎯 INJECT THIS: Strict Permissions Policy
+app.use((req, res, next) => {
+    res.setHeader(
+        "Permissions-Policy", 
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    );
+    next();
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "dist")));
