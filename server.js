@@ -56,6 +56,13 @@ transporter.verify((error) => {
 // ROUTE UTAMA & AUTHENTICATION (POSTGRES MIGRATED)
 // =========================================================================
 
+// 🎯 INJECT THIS BLOCK: Broadcasts the Sandbox safety flag to the frontend UI
+app.get("/api/config", (_req, res) => {
+    res.json({
+        isSandbox: process.env.APP_MODE === "sandbox"
+    });
+});
+
 app.get("/api/getusers", async (_req, res) => {
     logger.info("Received getusers request");
     try {
@@ -211,7 +218,11 @@ app.post("/api/verifyotp", async (req, res) => {
 
 app.get("/api/whoami", jwtAuth, async (req, res) => {
     logger.info("Received whoami request");
-    res.json(req.user);
+    // 🎯 INJECT THE FLAG HERE TOO:
+    res.json({
+        ...req.user,
+        isSandbox: process.env.APP_MODE === "sandbox"
+    });
 });
 
 // =========================================================================
