@@ -356,6 +356,66 @@ app.get("/api/masteritems", jwtAuth, async (req, res) => {
     }
 });
 
+app.get("/api/analytics", jwtAuth, async (req, res) => {
+    // Only Admin (and maybe Warehouse) should see full district analytics
+    if (req.user.role !== "Admin" && req.user.role !== "Warehouse") {
+        return res.status(403).json({ error: "Forbidden" });
+    }
+
+    try {
+        // 1. Top Consuming Clinics (Usage Volume)
+        const topClinics = await sql`
+            SELECT l.location_name as name, SUM(t.quantity)::int as total_used
+            FROM transactions t
+            JOIN locations l ON t.location_id = l.id
+            WHERE t.operation = 'deduct' AND t.status_override = 'Used'
+            GROUP BY l.location_name
+            ORDER BY total_used DESC LIMIT 5
+        `;
+
+        // 2. Fastest Moving Items (High Burn Rate)
+        const topItems = await sql`
+            SELECT i.item_name as name, SUM(t.quantity)::int as total_used
+            FROM transactions t
+            JOIN items i ON t.item_id = i.id
+            WHERE t.operation = 'deduct' AND t.status_override = 'Used'
+            GROUP BY i.item_name
+            ORDER BY total_used DESC LIMIT 5
+        `;
+
+        // 3. Inter-Clinic Dependency (Borrowing/Transfers)
+        const topTransfers = await sql`
+            SELECT fl.location_name as from_loc, tl.location_name as to_loc, COUNT(t.id)::int as transfer_count
+            FROM transactions t
+            JOIN locations fl ON t.from_location_id = fl.id
+            JOIN locations tl ON t.location_id = tl.id
+            WHERE t.operation = 'transfer'
+            GROUP BY fl.location_name, tl.location_name
+            ORDER BY transfer_count DESC LIMIT 5
+        `;
+
+        // 4. Most Active System Users (Audit Compliance)
+        const activeUsers = await sql`
+            SELECT u.username as name, COUNT(t.id)::int as activities
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            GROUP BY u.username
+            ORDER BY activities DESC LIMIT 5
+        `;
+
+        res.json({
+            topClinics: topClinics || [],
+            topItems: topItems || [],
+            topTransfers: topTransfers || [],
+            activeUsers: activeUsers || []
+        });
+
+    } catch (err) {
+        logger.error("Failed to fetch analytics:", err.message);
+        res.status(500).json({ error: "Analytics processing failed" });
+    }
+});
+
 // =========================================================================
 // CLINIC BACKEND ACTIONS (RECORD USAGE, TRANSEFER, CONFIRM RECEIPT)
 // =========================================================================

@@ -1,14 +1,5 @@
 import sql from './db.js';
 
-// 🎯 THE PRODUCTION KILL-SWITCH: Absolute protection against accidental writes
-if (process.env.APP_MODE !== "sandbox") {
-    console.error("\n💥 [CRITICAL STOP] DEPLOYMENT BLOCKED!");
-    console.error(`This script is restricted to run ONLY in 'sandbox' mode.`);
-    console.error(`Your current system is set to: APP_MODE = [${process.env.APP_MODE || "PRODUCTION / NOT SET"}]`);
-    console.error("Execution aborted automatically to protect live clinical data.\n");
-    process.exit(1); // Force exit with failure code
-}
-
 // 1. Paste your converted Google Sheets stock snapshot array right here
 const sheetSnapshot = [
   {

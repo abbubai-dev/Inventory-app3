@@ -13,6 +13,8 @@ import {
     Tooltip,
     Legend
 } from "chart.js";
+// 🎯 INJECT THIS IMPORT:
+import AnalyticsDashboard from "../components/AnalyticsDashboard";
 
 // Register ChartJS modules globally
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -241,7 +243,6 @@ const AdminDashboard = ({ logout }) => {
                                             {locations.map((l) => <option key={l} value={l}>{l}</option>)}
                                         </select>
                                     </div>
-                                    {/* ✅ FIX 1: Switched button type to 'submit' so form fires correctly */}
                                     <button
                                         type="submit"
                                         disabled={loading}
@@ -329,6 +330,8 @@ const AdminDashboard = ({ logout }) => {
 
                 {activeTab === "reports" && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                        
+                        {/* 1. Header & PDF Export Buttons */}
                         <div className="flex justify-between items-center">
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-800">System Reports & Analytics</h1>
@@ -344,57 +347,9 @@ const AdminDashboard = ({ logout }) => {
                             </div>
                         </div>
 
-                        {/* 📊 THE DYNAMIC ANALYTICS LAYER */}
-                        <div className="grid grid-cols-1 gap-6">
-                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                                <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-4">
-                                    Consolidated Distribution Volume by Product
-                                </h3>
-                                
-                                {reportLoading ? (
-                                    <div className="p-20 text-center font-bold text-slate-400 animate-pulse">
-                                        Calculating telemetry datasets...
-                                    </div>
-                                ) : (
-                                    <div className="h-80 w-full flex items-center justify-center">
-                                        {/* Dynamic ChartJS instance wrapper frame */}
-                                        <Bar 
-                                            ref={chartRef}
-                                            options={{
-                                                responsive: true,
-                                                maintainAspectRatio: false,
-                                                plugins: {
-                                                    legend: { display: true, position: 'top' }
-                                                }
-                                            }}
-                                            data={{
-                                                // Extract item descriptors directly from current global metrics state array
-                                                labels: Object.keys(
-                                                    [...adminHistory.transfers, ...adminHistory.usage].reduce((acc, curr) => {
-                                                        acc[curr.Item_Name || "Transfers"] = true;
-                                                        return acc;
-                                                    }, {})
-                                                ),
-                                                datasets: [
-                                                    {
-                                                        label: "Total Operational Volume Items",
-                                                        data: Object.values(
-                                                            [...adminHistory.transfers, ...adminHistory.usage].reduce((acc, curr) => {
-                                                                const key = curr.Item_Name || "Transfers";
-                                                                acc[key] = (acc[key] || 0) + Number(curr.Total_Items || 1);
-                                                                return acc;
-                                                                }, {})
-                                                        ),
-                                                        backgroundColor: "rgba(37, 99, 235, 0.85)", // Solid brand-aligned blue
-                                                        borderRadius: 12
-                                                    }
-                                                ]
-                                            }} 
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        {/* 2. 📊 THE NEW DYNAMIC ANALYTICS LAYER */}
+                        <AnalyticsDashboard />
+                        
                     </div>
                 )}
             </div>
