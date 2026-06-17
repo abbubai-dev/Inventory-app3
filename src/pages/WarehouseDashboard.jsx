@@ -122,18 +122,36 @@ const WarehouseDashboard = ({ logout }) => {
           </header>
 
           <main className="p-4 space-y-4">
-              {/* Tab Switcher */}
-              <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
-                  {['alerts', 'audit'].map((t) => (
-                      <button
-                          key={t}
-                          onClick={() => setView(t)}
-                          className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${view === t ? 'bg-white shadow-md text-blue-600' : 'text-slate-500'}`}
-                      >
-                          {t === 'alerts' ? 'LOW STOCK' : 'RECEIPTS'}
-                      </button>
-                  ))}
-              </div>
+                {/* Tab Switcher */}
+                <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
+                    {['alerts', 'audit'].map((t) => {
+                        // Calculate the total number of shortage items across all clinics/groups
+                        const alertCount = getGroupedAlerts().reduce((acc, curr) => acc + curr.shortages.length, 0);
+
+                        return (
+                            <button
+                                key={t}
+                                onClick={() => setView(t)}
+                                className={`flex-1 py-3 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 ${
+                                    view === t ? 'bg-white shadow-md text-blue-600' : 'text-slate-500'
+                                }`}
+                            >
+                                {t === 'alerts' ? (
+                                    <>
+                                        LOW STOCK
+                                        {alertCount > 0 && (
+                                            <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[9px] font-black leading-none">
+                                                {alertCount}
+                                            </span>
+                                        )}
+                                    </>
+                                ) : (
+                                    'RECEIPTS'
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
 
               {/* Global Clinic Filter */}
               <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
