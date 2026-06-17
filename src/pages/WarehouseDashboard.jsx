@@ -125,8 +125,8 @@ const WarehouseDashboard = ({ logout }) => {
                 {/* Tab Switcher */}
                 <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
                     {['alerts', 'audit'].map((t) => {
-                        // Calculate the total number of shortage items across all clinics/groups
-                        const alertCount = getGroupedAlerts().reduce((acc, curr) => acc + curr.shortages.length, 0);
+                        // We count the number of unique items that have at least one shortage
+                        const alertCount = getGroupedAlerts().length;
 
                         return (
                             <button
