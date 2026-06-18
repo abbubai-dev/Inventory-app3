@@ -188,8 +188,35 @@ app.post("/api/login", async (req, res) => {
                 .catch(err => logger.error(`[MAIL ERROR] Failed pushing login token to ${user.email}:`, err.message));
         }
 
-        // 4. Send clean response back to your React frontend
-        res.json({ success: true, otpSkipped: !isClinic || !otpEnabled });
+        // 4. Determine if we skip the OTP screen
+        const otpSkipped = !isClinic || !otpEnabled;
+
+        if (otpSkipped) {
+            // 🎯 POKA-YOKE: Issue the token immediately since they aren't going to verifyotp
+            const userPayload = {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                location: user.location_name, 
+            };
+
+            const token = await new jose.SignJWT(userPayload)
+                .setProtectedHeader({ alg: "HS256" })
+                .setIssuedAt()
+                .setExpirationTime("9h")
+                .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+
+            // Return the token exactly how /api/verifyotp does
+            return res.json({ 
+                success: true, 
+                otpSkipped: true, 
+                token: token, 
+                user: userPayload 
+            });
+        }
+
+        // 5. If OTP is required, tell the frontend to wait for it (No token issued yet)
+        return res.json({ success: true, otpSkipped: false });
     } catch (err) {
         logger.error("Error in login:", err.message);
         res.status(500).json({ error: "Database Error" });
