@@ -140,8 +140,9 @@ app.post("/api/login", async (req, res) => {
         if (!isMatch) return res.status(401).json({ error: "Unauthorized Password" });
 
         const isClinic = user.role === "Clinic";
-        
-        if (isClinic && false) { // Adding && false disables it instantly
+        const otpEnabled = process.env.ENABLE_OTP === 'true';
+
+        if (isClinic && otpEnabled) { // Add TRIGGER to enable/disable OTP when needed
             // Janakan 6 digit OTP ringkas
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             
@@ -188,13 +189,7 @@ app.post("/api/login", async (req, res) => {
         }
 
         // 4. Send clean response back to your React frontend
-        // Ensure you are returning the structure your frontend expects to proceed to the dashboard
-        res.json({ 
-            success: true, 
-            token: "your-jwt-token-here", // Ensure you are generating your JWT/Session here
-            otpSkipped: true // Inform the frontend that OTP is bypassed
-        });
-        // res.json({ success: true, otpSkipped: !isClinic });
+        res.json({ success: true, otpSkipped: !isClinic || !otpEnabled });
     } catch (err) {
         logger.error("Error in login:", err.message);
         res.status(500).json({ error: "Database Error" });
