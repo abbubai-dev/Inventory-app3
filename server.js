@@ -488,9 +488,10 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                         continue;
                     }
 
-                    // Deduct from current clinic balance
+                    // Deduct from current clinic balance (Forcing a positive number to ensure subtraction)
+                    const safeQty = Math.abs(Number(item.qty));
                     await sql`
-                        UPDATE stock SET quantity = quantity - ${Number(item.qty)}
+                        UPDATE stock SET quantity = quantity - ${safeQty}
                         WHERE item_id = ${itemData.id} AND location_id = ${locData.id}
                     `;
 
@@ -499,7 +500,7 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
 
                     await sql`
                         INSERT INTO transactions (id, item_id, location_id, user_id, quantity, operation, status_override)
-                        VALUES (${usageTxnId}, ${itemData.id}, ${locData.id}, ${resolvedUserId}, ${Number(item.qty)}, 'deduct', 'Used')
+                        VALUES (${usageTxnId}, ${itemData.id}, ${locData.id}, ${resolvedUserId}, ${safeQty}, 'deduct', 'Used')
                     `;
                 }
             });

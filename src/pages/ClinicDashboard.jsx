@@ -178,7 +178,7 @@ const ClinicDashboard = ({ user, logout }) => {
 		const sanitizedCart = cart.map((item) => ({
 			name: item.Item_Name || item.name,
 			code: item.Item_Code || item.code, // ✅ Matches new header
-			qty: Number(item.qty) || 0,
+			qty: Math.abs(Number(item.qty)) || 0,
 		}));
 
 		const token = localStorage.getItem("InventoryAppToken");
@@ -215,7 +215,7 @@ const ClinicDashboard = ({ user, logout }) => {
     	const sanitizedCart = cart.map((item) => ({
         	name: String(item.name || "").trim(),
         	code: String(item.code || item.Code || "").trim(),
-        	qty: Number(item.qty) || 0,
+        	qty: Math.abs(Number(item.qty)) || 0,
     	}));
 
     	const token = localStorage.getItem("InventoryAppToken");
