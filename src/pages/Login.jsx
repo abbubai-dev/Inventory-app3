@@ -53,32 +53,35 @@ const Login = ({ setUser }) => {
 	};
 	
 	// STEP 1: Validate Password and Send OTP
-	const handleRequestOTP = async (e) => {
-		e.preventDefault();
-		setLoading(true);
+    const handleRequestOTP = async (e) => {
+        e.preventDefault();
+        setLoading(true);
 
-		try {
-			const response = await axios.post("/api/login", {
-				username: selectedUser,
-				password,
-				selectedLoc,
-			});
+        try {
+            const response = await axios.post("/api/login", {
+                username: selectedUser,
+                password,
+                selectedLoc,
+            });
 
-			// ✅ Check if the server said we can skip OTP (Admin/Warehouse)
-			if (response.data.otpSkipped) {
-				// Call Phase 2 immediately with a dummy code
-				await finalizeLogin("0000"); 
-			} else {
-				alert("OTP sent!");
-				setStep(2); // Proceed to OTP screen for Clinics
-			}
-		} catch (err) {
-			alert("Login Failed: Check credentials");
-			console.error("Login Failed", err);
-		} finally {
-			setLoading(false);
-		}
-	};
+            // ✅ Check if the server said we can skip OTP (Admin/Warehouse or ENABLE_OTP=false)
+            if (response.data.otpSkipped) {
+                // The server bypassed OTP and gave us the token directly! 
+                // Do NOT hit /api/verifyotp. Log in immediately.
+                localStorage.setItem("InventoryAppToken", response.data.token);
+                localStorage.setItem("InventoryAppUser", JSON.stringify(response.data.user));
+                setUser(response.data.user); 
+            } else {
+                alert("OTP sent!");
+                setStep(2); // Proceed to OTP screen
+            }
+        } catch (err) {
+            alert("Login Failed: Check credentials");
+            console.error("Login Failed", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
 	// STEP 2: Verify OTP and Log In
 	const handleVerifyOTP = async (e) => {
