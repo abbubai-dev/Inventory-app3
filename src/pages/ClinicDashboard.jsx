@@ -616,7 +616,11 @@ const ClinicDashboard = ({ user, logout }) => {
 										{(() => {
 											const today = new Date().toDateString();
 											return (history.usage || [])
-												.filter(u => new Date(u.Timestamp).toDateString() === today && u.Status === "Used")
+												.filter(u => 
+													new Date(u.Timestamp).toDateString() === today && 
+													u.Status === "Used" && 
+													u.Location_From === user.location // 🎯 NEW: Only count if I am the one who used it
+												)
 												.reduce((sum, curr) => sum + (Number(curr.Total_Items) || 0), 0);
 										})()}
 									</p>

@@ -499,8 +499,8 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                     const usageTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
                     await sql`
-                        INSERT INTO transactions (id, item_id, location_id, user_id, quantity, operation, status_override)
-                        VALUES (${usageTxnId}, ${itemData.id}, ${locData.id}, ${resolvedUserId}, ${safeQty}, 'deduct', 'Used')
+                        INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
+                        VALUES (${usageTxnId}, ${itemData.id}, ${locData.id}, ${locData.id}, ${resolvedUserId}, ${safeQty}, 'deduct', 'Used')
                     `;
                 }
             });
