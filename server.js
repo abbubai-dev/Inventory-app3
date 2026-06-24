@@ -596,11 +596,28 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                 for (const item of cart) {
                     if (!item.code) continue;
 
-                    const [itemData] = await sql`SELECT id, unit_multiplier FROM items WHERE item_code = ${item.code}`;
+                    // 1. Fetch the location ID first
                     const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
-                    
-                    if (!itemData || !locData) continue;
+                    if (!locData) continue; // Safety check: Clinic must exist
 
+                    // 2. Try to find the item in the master catalog
+                    let [itemData] = await sql`SELECT id, unit_multiplier FROM items WHERE item_code = ${item.code}`;
+                    
+                    // 🎯 LEAN FIX: Auto-Create New Master Item
+                    if (!itemData) {
+                        logger.info(`[Auto-Create] New Master Item Detected: ${item.code} - ${item.name}`);
+                        
+                        // Insert and immediately return the new row's ID and multiplier
+                        const [newItem] = await sql`
+                            INSERT INTO items (item_code, item_name, unit_multiplier)
+                            VALUES (${item.code}, ${item.name || 'Unknown Document Item'}, ${item.unit || 1})
+                            RETURNING id, unit_multiplier
+                        `;
+                        
+                        itemData = newItem; // Assign the newly created data to our working variable
+                    }
+
+                    // 3. Proceed with math and stock updates normally
                     const totalToIncrement = Number(item.qty) * (itemData.unit_multiplier || 1);
 
                     await sql`
@@ -613,9 +630,10 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                     // ✅ FIXED: Generates an absolute unique row identifier string log entry key signature
                     const addTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+                    // Note: We also populate from_location_id with locData.id to keep transaction history clean
                     await sql`
-                        INSERT INTO transactions (id, item_id, location_id, user_id, quantity, operation, status_override)
-                        VALUES (${addTxnId}, ${itemData.id}, ${locData.id}, ${resolvedUserId}, ${totalToIncrement}, 'add', 'Add')
+                        INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
+                        VALUES (${addTxnId}, ${itemData.id}, ${locData.id}, ${locData.id}, ${resolvedUserId}, ${totalToIncrement}, 'add', 'Add')
                     `;
                 }
             });
