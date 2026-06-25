@@ -15,7 +15,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Clever1234
-      POSTGRES_DB: postgres # Default master landing database
+      POSTGRES_DB: kdip_sandbox # Default master landing database
     ports:
       - "5432:5432" # Maps internal port to your VPS external gateway
     volumes:
