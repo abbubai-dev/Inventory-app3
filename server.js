@@ -614,7 +614,7 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                             RETURNING id, unit_multiplier
                         `;
                         
-                        itemData = newItem; // Assign the newly created data to our working variable
+                        itemData = newItem;
                     }
 
                     // 3. Proceed with math and stock updates normally
@@ -627,13 +627,13 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                         DO UPDATE SET quantity = stock.quantity + ${totalToIncrement}
                     `;
 
-                    // ✅ FIXED: Generates an absolute unique row identifier string log entry key signature
                     const addTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-                    // Note: We also populate from_location_id with locData.id to keep transaction history clean
+                    // ✅ FIXED: Removed from_location_id so it defaults to NULL. 
+                    // This ensures the frontend UI correctly registers it as an inbound external addition (+)
                     await sql`
-                        INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
-                        VALUES (${addTxnId}, ${itemData.id}, ${locData.id}, ${locData.id}, ${resolvedUserId}, ${totalToIncrement}, 'add', 'Add')
+                        INSERT INTO transactions (id, item_id, location_id, user_id, quantity, operation, status_override)
+                        VALUES (${addTxnId}, ${itemData.id}, ${locData.id}, ${resolvedUserId}, ${totalToIncrement}, 'add', 'Add')
                     `;
                 }
             });
