@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"; // <-- Add useRef to capture the canvas image
 import axios from "axios";
-import { LogOut, FileText, Users, ShieldCheck, Download, Bell } from "lucide-react";
+import { LogOut, FileText, Users, ShieldCheck, Download, Bell, AlertTriangle } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { Bar } from "react-chartjs-2";
