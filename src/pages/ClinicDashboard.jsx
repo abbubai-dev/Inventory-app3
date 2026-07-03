@@ -207,6 +207,30 @@ const ClinicDashboard = ({ user, logout }) => {
 		}
 	};
 
+	const handleDeleteRequest = async (txnId) => {
+        if (!confirm("Request Admin to delete this usage record?")) return;
+
+        const token = localStorage.getItem("InventoryAppToken");
+        try {
+            setActionLoading(true);
+            await axios.post("/api/clinicaction", {
+                action: "requestDelete",
+                txnId: txnId
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            setStatus({ msg: "Delete request sent to Admin.", type: "success" });
+            
+            setTimeout(() => {
+                setStatus(null);
+                refreshData();
+            }, 2000);
+        } catch (error) {
+            alert("Failed to send delete request. Check connection.");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
 	const handleClinicTransfer = async () => {
     	if (!targetLoc) return alert("Please select a destination clinic.");
     	if (cart.length === 0) return alert("Your transfer cart is empty.");
@@ -412,6 +436,13 @@ const ClinicDashboard = ({ user, logout }) => {
                 label: iAmSender ? `Sent to ${log.Location_To || log.To}` : `Incoming from ${log.Location_From || log.From}`,
                 context: iAmSender ? "Awaiting Confirmation" : "Action Required"
             };
+			case "Pending Delete":
+            return {
+                icon: <Trash2 size={18} />,
+                color: "bg-red-50 text-red-500 border-red-100",
+                label: "Deletion Pending",
+                context: "Awaiting Admin Approval"
+            };
 			default:
 			return {
 				icon: <Package size={18} />,
@@ -453,7 +484,7 @@ const ClinicDashboard = ({ user, logout }) => {
 			if (!(iAmSender || iAmReceiver)) return false;
 
 			// ✅ TAB FILTER (The logic that simplifies our data)
-			if (activeTab === "usage" && log.Status !== "Used") return false;
+			if (activeTab === "usage" && !["Used", "Pending Delete"].includes(log.Status)) return false;
 			if (activeTab === "receipts" && log.Status !== "Add") return false;
 			if (activeTab === "transfers" && !["Pending", "TransferIn", "TransferOut"].includes(log.Status)) return false;
 
@@ -1399,6 +1430,19 @@ const ClinicDashboard = ({ user, logout }) => {
 																		</p>
 																	</div>
 																</div>
+
+																{/* The Delete Request Button */}
+																{log.Status === "Used" && (
+																	<div className="mt-3 pt-3 border-t border-slate-50 flex justify-end">
+																		<button 
+																			onClick={() => handleDeleteRequest(log.TxnID)}
+																			disabled={actionLoading}
+																			className="text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest flex items-center gap-1 transition-colors"
+																		>
+																			<Trash2 size={12} strokeWidth={3} /> Request Delete
+																		</button>
+																	</div>
+																)}
 
 																{/* PENDING ACTION */}
 																{log.Status === "Pending" && String(log.Location_To) === String(user.location) && (

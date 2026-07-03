@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"; // <-- Add useRef to capture the canvas image
 import axios from "axios";
-import { LogOut, FileText, Users, ShieldCheck, Download } from "lucide-react";
+import { LogOut, FileText, Users, ShieldCheck, Download, Bell } from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { Bar } from "react-chartjs-2";
@@ -33,11 +33,20 @@ const AdminDashboard = ({ logout }) => {
 
     const chartRef = useRef(null); // Hook reference to capture chart canvas state
 
-    // Trigger data fetch based on tab
+    // 1. Fetch History immediately on load 
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    // 2. Trigger other data fetches based on tab
     useEffect(() => {
         if (activeTab === "users") getAllUsers();
         if (activeTab === "master") fetchMasterList();
-        if (activeTab === "reports") fetchHistory();
+        
+        // Re-fetch history if they click into these tabs to get the latest data
+        if (activeTab === "reports" || activeTab === "approvals") {
+            fetchHistory();
+        }
     }, [activeTab]);
 
     const fetchMasterList = async () => {
@@ -85,6 +94,31 @@ const AdminDashboard = ({ logout }) => {
             console.error("Failed to fetch reports", err);
         } finally {
             setReportLoading(false);
+        }
+    };
+
+    const handleResolveDelete = async (txnId, resolution) => {
+        const actionType = resolution === "Approve" ? "approveDelete" : "rejectDelete";
+        
+        // Confirm before executing
+        if (!confirm(`Are you sure you want to ${resolution.toUpperCase()} this deletion request?`)) return;
+
+        const token = localStorage.getItem("InventoryAppToken");
+        try {
+            setActionLoading(true);
+            const { data } = await axios.post("/api/adminaction", {
+                action: actionType,
+                txnId: txnId
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            if (data.status === "success") {
+                alert(`Request successfully ${resolution.toLowerCase()}d!`);
+                refreshData(); // Refresh to update the list and stock levels
+            }
+        } catch (error) {
+            alert("Failed to process request. Check connection.");
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -186,40 +220,71 @@ const AdminDashboard = ({ logout }) => {
     return (
         <div className="min-h-screen bg-slate-50 flex">
             {/* Sidebar View */}
-            <div className="w-64 bg-slate-900 text-white p-6 shadow-xl">
+            <div className="w-64 bg-slate-900 text-white p-6 shadow-xl flex flex-col">
                 <h2 className="text-xl font-bold mb-8 flex items-center gap-2">
                     <ShieldCheck className="text-blue-400" size={24} /> Admin
                 </h2>
-                <nav className="space-y-4">
+                
+                <nav className="space-y-4 flex-1">
                     <div
                         onClick={() => setActiveTab("users")}
-                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "users" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800"}`}
+                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "users" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
                     >
                         <Users size={20} /> User Management
                     </div>
+                    
                     <div
                         onClick={() => setActiveTab("master")}
-                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "master" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800"}`}
+                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "master" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
                     >
                         <FileText size={20} /> Master Item List
                     </div>
+
+                    {/* --- REVIEW TASKS TAB --- */}
+                    <div
+                        onClick={() => setActiveTab("approvals")}
+                        className={`p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all ${activeTab === "approvals" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+                    >
+                        <div className="flex items-center gap-2">
+                            {/* The Bell Icon with Ping */}
+                            <div className="relative">
+                                <Bell size={20} />
+                                {/* Calculate pending tasks on the fly */}
+                                {(history?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
+                                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 border border-slate-900 ${activeTab === "approvals" ? "bg-white border-blue-600" : "bg-red-500"}`}></span>
+                                    </span>
+                                )}
+                            </div>
+                            Review Tasks
+                        </div>
+                        
+                        {/* Optional: Show exact number badge */}
+                        {(history?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${activeTab === "approvals" ? "bg-white text-blue-600" : "bg-red-500 text-white"}`}>
+                                {(history?.usage || []).filter(log => log.Status === "Pending Delete").length}
+                            </span>
+                        )}
+                    </div>
+
                     <div
                         onClick={() => setActiveTab("reports")}
-                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "reports" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800"}`}
+                        className={`p-3 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${activeTab === "reports" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
                     >
                         <FileText size={20} /> System Reports
                     </div>
-
-                    <div className="pt-8 mt-8 border-t border-slate-800">
-                        <button
-                            type="button"
-                            onClick={logout}
-                            className="p-3 text-slate-400 flex items-center gap-2 hover:text-white hover:bg-red-500/10 rounded-xl transition-all w-full"
-                        >
-                            <LogOut size={20} /> Logout
-                        </button>
-                    </div>
                 </nav>
+
+                <div className="pt-8 mt-8 border-t border-slate-800">
+                    <button
+                        type="button"
+                        onClick={logout}
+                        className="p-3 text-slate-400 flex items-center gap-2 hover:text-white hover:bg-red-500/10 rounded-xl transition-all w-full"
+                    >
+                        <LogOut size={20} /> Logout
+                    </button>
+                </div>
             </div>
 
             {/* Main Workspace Frame */}
@@ -327,6 +392,64 @@ const AdminDashboard = ({ logout }) => {
                         </div>
                     </div>
                 )}
+
+                {activeTab === "approvals" && (
+                <div className="animate-in fade-in duration-500 max-w-3xl">
+                    <h1 className="text-2xl font-bold mb-8 text-slate-800">Action Center</h1>
+                    
+                    {/* --- ADMIN REVIEW: PENDING DELETES --- */}
+                    <div className="bg-white p-6 rounded-4xl border border-red-100 shadow-sm mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                                <AlertTriangle size={20} strokeWidth={2.5} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-black text-slate-900 tracking-tight">Deletion Requests</h2>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Requires Approval</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            {/* Filter history to only show Pending Deletes */}
+                            {(history.usage || []).filter(log => log.Status === "Pending Delete").map(log => (
+                                <div key={log.TxnID} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                    
+                                    {/* Info Block */}
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{log.Location_From}</p>
+                                        <h4 className="text-sm font-black text-slate-800">{log.Item_Name}</h4>
+                                        <p className="text-xs font-bold text-red-500 mt-1">Requested to refund {log.Total_Items} items</p>
+                                        <p className="text-[9px] text-slate-400 mt-1">ID: {log.TxnID} • By: {log.User}</p>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2 shrink-0">
+                                        <button 
+                                            onClick={() => handleResolveDelete(log.TxnID, "Reject")}
+                                            disabled={actionLoading}
+                                            className="px-4 py-2 bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase active:scale-95 transition hover:bg-slate-300"
+                                        >
+                                            Reject
+                                        </button>
+                                        <button 
+                                            onClick={() => handleResolveDelete(log.TxnID, "Approve")}
+                                            disabled={actionLoading}
+                                            className="px-4 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-red-200 active:scale-95 transition hover:bg-red-600"
+                                        >
+                                            Approve Refund
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Empty State */}
+                            {(history.usage || []).filter(log => log.Status === "Pending Delete").length === 0 && (
+                                <p className="text-center text-xs font-bold text-slate-400 py-8">No pending deletion requests. You're all caught up!</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
                 {activeTab === "reports" && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">

@@ -444,6 +444,61 @@ app.get("/api/analytics", jwtAuth, async (req, res) => {
     }
 });
 
+app.post("/api/adminaction", jwtAuth, async (req, res) => {
+    // 🎯 POKA-YOKE: Strict Role-Based Access Control
+    if (req.user.role !== "Admin") {
+        return res.status(403).json({ error: "Forbidden: Admin clearance required." });
+    }
+
+    const { action, txnId } = req.body;
+
+    try {
+        if (action === "approveDelete") {
+            await sql.begin(async (sql) => {
+                // 1. Fetch the exact transaction details
+                const [txn] = await sql`
+                    SELECT item_id, location_id, quantity 
+                    FROM transactions 
+                    WHERE id = ${txnId} AND status_override = 'Pending Delete'
+                `;
+
+                if (!txn) throw new Error("Transaction not found or not pending deletion.");
+
+                // 2. REFUND THE STOCK: Add the accidentally deducted quantity back to the clinic
+                await sql`
+                    UPDATE stock 
+                    SET quantity = quantity + ${txn.quantity}
+                    WHERE item_id = ${txn.item_id} AND location_id = ${txn.location_id}
+                `;
+
+                // 3. AUDIT TRAIL: Soft-delete the transaction (Never hard delete!)
+                await sql`
+                    UPDATE transactions 
+                    SET status_override = 'Deleted', timestamp = NOW()
+                    WHERE id = ${txnId}
+                `;
+            });
+            return res.json({ status: "success" });
+        }
+
+        if (action === "rejectDelete") {
+            // 4. REVERT: Admin denies the request, status goes back to 'Used'
+            await sql`
+                UPDATE transactions 
+                SET status_override = 'Used' 
+                WHERE id = ${txnId} AND status_override = 'Pending Delete'
+            `;
+            return res.json({ status: "success" });
+        }
+
+        res.status(400).json({ error: "Unknown admin action." });
+
+    } catch (err) {
+        logger.error(`[Admin Action Failed] ${action}:`, err.message);
+        res.status(500).json({ error: "Failed to process admin approval." });
+    }
+});
+
 // =========================================================================
 // CLINIC BACKEND ACTIONS (RECORD USAGE, TRANSEFER, CONFIRM RECEIPT)
 // =========================================================================
@@ -640,6 +695,23 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
             return res.json({ status: "success" });
         }
 
+        // ==========================================
+        // ACTION F: Request Delete (Mistake Reversal)
+        // ==========================================
+        if (action === "requestDelete") {
+            if (!txnId) return res.status(400).json({ error: "No transaction ID provided" });
+
+            // Update the status to 'Pending Delete' so the Admin sees it.
+            // Poka-Yoke: We only allow records that are currently 'Used' to be flagged.
+            await sql`
+                UPDATE transactions 
+                SET status_override = 'Pending Delete' 
+                WHERE id = ${txnId} AND status_override = 'Used'
+            `;
+            
+            return res.json({ status: "success" });
+        }
+
         res.status(400).json({ error: "Unknown action parameter profile value" });
     } catch (err) {
         logger.error(`[CRITICAL FAILURE] Interface operation run error [${action}]:`, err.message);
@@ -781,7 +853,7 @@ app.get("/api/history", jwtAuth, async (req, res) => {
             ORDER BY t.timestamp DESC
         `;
 
-        const usage = logs.filter(log => log.Status === "Used");
+        const usage = logs.filter(log => ["Used", "Pending Delete"].includes(log.Status));
         const transfers = logs.filter(log => ["Pending", "TransferIn", "TransferOut", "Add"].includes(log.Status));
 
         res.json({ transfers, usage });
