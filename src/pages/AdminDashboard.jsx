@@ -250,7 +250,7 @@ const AdminDashboard = ({ logout }) => {
                             <div className="relative">
                                 <Bell size={20} />
                                 {/* Calculate pending tasks on the fly */}
-                                {(history?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
+                                {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
                                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                                         <span className={`relative inline-flex rounded-full h-2.5 w-2.5 border border-slate-900 ${activeTab === "approvals" ? "bg-white border-blue-600" : "bg-red-500"}`}></span>
@@ -261,9 +261,9 @@ const AdminDashboard = ({ logout }) => {
                         </div>
                         
                         {/* Optional: Show exact number badge */}
-                        {(history?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
+                        {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${activeTab === "approvals" ? "bg-white text-blue-600" : "bg-red-500 text-white"}`}>
-                                {(history?.usage || []).filter(log => log.Status === "Pending Delete").length}
+                                {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length}
                             </span>
                         )}
                     </div>
@@ -411,7 +411,8 @@ const AdminDashboard = ({ logout }) => {
 
                         <div className="space-y-3">
                             {/* Filter history to only show Pending Deletes */}
-                            {(history.usage || []).filter(log => log.Status === "Pending Delete").map(log => (
+                            {/* Change history.usage to adminHistory.usage */}
+                            {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").map(log => (
                                 <div key={log.TxnID} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl flex flex-col md:flex-row justify-between md:items-center gap-4">
                                     
                                     {/* Info Block */}
@@ -443,7 +444,8 @@ const AdminDashboard = ({ logout }) => {
                             ))}
 
                             {/* Empty State */}
-                            {(history.usage || []).filter(log => log.Status === "Pending Delete").length === 0 && (
+                            {/* Change history.usage to adminHistory.usage */}
+                            {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").length === 0 && (
                                 <p className="text-center text-xs font-bold text-slate-400 py-8">No pending deletion requests. You're all caught up!</p>
                             )}
                         </div>
