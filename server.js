@@ -464,14 +464,14 @@ app.post("/api/adminaction", jwtAuth, async (req, res) => {
 
                 if (!txn) throw new Error("Transaction not found or not pending deletion.");
 
-                // 2. REFUND THE STOCK: Add the accidentally deducted quantity back to the clinic
+                // 2. REFUND THE STOCK: Force Number() to prevent string math crashes
                 await sql`
                     UPDATE stock 
-                    SET quantity = quantity + ${txn.quantity}
+                    SET quantity = quantity + ${Number(txn.quantity)}
                     WHERE item_id = ${txn.item_id} AND location_id = ${txn.location_id}
                 `;
 
-                // 3. AUDIT TRAIL: Soft-delete the transaction (Never hard delete!)
+                // 3. AUDIT TRAIL: Soft-delete the transaction
                 await sql`
                     UPDATE transactions 
                     SET status_override = 'Deleted', timestamp = NOW()
@@ -494,7 +494,11 @@ app.post("/api/adminaction", jwtAuth, async (req, res) => {
         res.status(400).json({ error: "Unknown admin action." });
 
     } catch (err) {
-        logger.error(`[Admin Action Failed] ${action}:`, err.message);
+        // 🎯 LOGGING UPGRADE: This will print the EXACT database crash reason in your terminal
+        console.error(`\n❌ [ADMIN ACTION CRASH] Failed to execute ${action} on ${txnId}`);
+        console.error("Reason:", err.message);
+        console.error(err); // Prints full stack trace
+        
         res.status(500).json({ error: "Failed to process admin approval." });
     }
 });
