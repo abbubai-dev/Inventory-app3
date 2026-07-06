@@ -30,6 +30,7 @@ const AdminDashboard = ({ logout }) => {
     const [masterList, setMasterList] = useState([]);
     const [masterLoading, setMasterLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [actionLoading, setActionLoading] = useState(false);
 
     const chartRef = useRef(null); // Hook reference to capture chart canvas state
 
