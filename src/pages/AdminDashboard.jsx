@@ -101,7 +101,6 @@ const AdminDashboard = ({ logout }) => {
     const handleResolveDelete = async (txnId, resolution) => {
         const actionType = resolution === "Approve" ? "approveDelete" : "rejectDelete";
         
-        // Confirm before executing
         if (!confirm(`Are you sure you want to ${resolution.toUpperCase()} this deletion request?`)) return;
 
         const token = localStorage.getItem("InventoryAppToken");
@@ -113,11 +112,18 @@ const AdminDashboard = ({ logout }) => {
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             if (data.status === "success") {
-                alert(`Request successfully ${resolution.toLowerCase()}d!`);
-                refreshData(); // Refresh to update the list and stock levels
+                // 🎯 INSTANT UI FEEDBACK: Immediately remove this transaction from state
+                setAdminHistory((prev) => ({
+                    ...prev,
+                    usage: prev.usage.filter((item) => item.TxnID !== txnId)
+                }));
+
+                // Re-fetch in background to keep all numbers 100% synced
+                fetchHistory();
             }
         } catch (error) {
-            alert("Failed to process request. Check connection.");
+            // Show the actual backend message if it fails
+            alert(error.response?.data?.error || "Failed to process request. Check connection.");
         } finally {
             setActionLoading(false);
         }

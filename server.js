@@ -659,8 +659,14 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                     const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
                     if (!locData) continue; // Safety check: Clinic must exist
 
-                    // 2. Try to find the item in the master catalog
-                    let [itemData] = await sql`SELECT id, unit_multiplier FROM items WHERE item_code = ${item.code}`;
+                    // 2. Try to find the item by exact code OR check if the code exists inside an Alias
+                    let [itemData] = await sql`
+                        SELECT id, unit_multiplier 
+                        FROM items 
+                        WHERE item_code = ${item.code} 
+                        OR alias ILIKE ${'%' + item.code + '%'}
+                        LIMIT 1
+                    `;
                     
                     // 🎯 LEAN FIX: Auto-Create New Master Item
                     if (!itemData) {
