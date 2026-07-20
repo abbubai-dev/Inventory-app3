@@ -6,20 +6,23 @@ services:
     env_file: .env
     ports:
       - "3000:3000"
+    depends_on:
+      - postgres-db # 🎯 POKA-YOKE: Ensures database boots before app starts
 
-  # 🐘 THE NEW POSTGRESQL DATABASE CONTAINER
+  # 🐘 POSTGRESQL DATABASE CONTAINER
   postgres-db:
     image: postgres:16-alpine
     container_name: kdip_postgres
     restart: always
+    env_file: .env # 🎯 Reads environment variables automatically from .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Clever1234
-      POSTGRES_DB: kdip_sandbox # Default master landing database
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "127.0.0.1:5432:5432" # Maps internal port to your VPS external gateway
+      - "127.0.0.1:5432:5432" # Secure loopback binding
     volumes:
-      - kdip_postgres_data:/var/lib/postgresql/data # ✅ FIXED: Pointed to official PG data directory
+      - kdip_postgres_data:/var/lib/postgresql/data
 
 volumes:
-  kdip_postgres_data: # Declares persistent named volume storage
+  kdip_postgres_data:
