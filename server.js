@@ -378,12 +378,25 @@ app.put("/api/admin/users/:userId", jwtAuth, async (req, res) => {
     const { email, location, role } = req.body;
 
     try {
+        let locationId = null;
+
+        // If a location name string was provided, look up its location_id
+        if (location) {
+            const [locData] = await sql`
+                SELECT id FROM locations WHERE location_name = ${location}
+            `;
+            if (locData) {
+                locationId = locData.id;
+            }
+        }
+
+        // Update location_id rather than location
         await sql`
             UPDATE users 
             SET 
                 email = COALESCE(${email}, email),
-                location = COALESCE(${location}, location),
-                role = COALESCE(${role}, role)
+                role = COALESCE(${role}, role),
+                location_id = COALESCE(${locationId}, location_id)
             WHERE id = ${userId}
         `;
         
