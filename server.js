@@ -368,6 +368,53 @@ app.post("/api/adduser", jwtAuth, async (req, res) => {
     }
 });
 
+// 🎯 UPDATE USER DETAILS (Email, Location, Role)
+app.put("/api/admin/users/:userId", jwtAuth, async (req, res) => {
+    if (req.user.role !== "Admin") {
+        return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const { userId } = req.params;
+    const { email, location, role } = req.body;
+
+    try {
+        await sql`
+            UPDATE users 
+            SET 
+                email = COALESCE(${email}, email),
+                location = COALESCE(${location}, location),
+                role = COALESCE(${role}, role)
+            WHERE id = ${userId}
+        `;
+        
+        return res.json({ status: "success", message: "User updated successfully." });
+    } catch (err) {
+        console.error("Failed to update user:", err);
+        return res.status(500).json({ error: "Failed to update user details." });
+    }
+});
+
+// 🎯 DELETE / REMOVE USER ACCOUNT
+app.delete("/api/admin/users/:userId", jwtAuth, async (req, res) => {
+    if (req.user.role !== "Admin") {
+        return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const { userId } = req.params;
+
+    if (String(userId) === String(req.user.id)) {
+        return res.status(400).json({ error: "You cannot delete your own admin account." });
+    }
+
+    try {
+        await sql`DELETE FROM users WHERE id = ${userId}`;
+        return res.json({ status: "success", message: "User removed successfully." });
+    } catch (err) {
+        console.error("Failed to delete user:", err);
+        return res.status(500).json({ error: "Failed to remove user." });
+    }
+});
+
 app.get("/api/masteritems", jwtAuth, async (req, res) => {
     if (req.user.role !== "Admin") return res.status(403).json({ error: "Forbidden" });
     try {
