@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from "react"; // <-- Add useRef to capture the canvas image
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { LogOut, FileText, Users, ShieldCheck, Download, Bell, AlertTriangle } from "lucide-react";
+import { 
+    LogOut, FileText, Users, ShieldCheck, Download, 
+    Bell, AlertTriangle, Trash2, Edit3, X, Save 
+} from "lucide-react";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 import { Bar } from "react-chartjs-2";
@@ -13,10 +16,8 @@ import {
     Tooltip,
     Legend
 } from "chart.js";
-// 🎯 INJECT THIS IMPORT:
 import AnalyticsDashboard from "../components/AnalyticsDashboard";
 
-// Register ChartJS modules globally
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 import { locations, roles } from "../utils/constants";
@@ -24,7 +25,7 @@ import { locations, roles } from "../utils/constants";
 const AdminDashboard = ({ logout }) => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [], });
+    const [adminHistory, setAdminHistory] = useState({ transfers: [], usage: [] });
     const [reportLoading, setReportLoading] = useState(false);
     const [activeTab, setActiveTab] = useState("users");
     const [masterList, setMasterList] = useState([]);
@@ -32,19 +33,18 @@ const AdminDashboard = ({ logout }) => {
     const [searchTerm, setSearchTerm] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
 
-    const chartRef = useRef(null); // Hook reference to capture chart canvas state
+    // 🎯 USER MANAGEMENT MODAL STATE
+    const [editingUser, setEditingUser] = useState(null);
 
-    // 1. Fetch History immediately on load 
+    const chartRef = useRef(null);
+
     useEffect(() => {
         fetchHistory();
     }, []);
 
-    // 2. Trigger other data fetches based on tab
     useEffect(() => {
         if (activeTab === "users") getAllUsers();
         if (activeTab === "master") fetchMasterList();
-        
-        // Re-fetch history if they click into these tabs to get the latest data
         if (activeTab === "reports" || activeTab === "approvals") {
             fetchHistory();
         }
@@ -54,7 +54,6 @@ const AdminDashboard = ({ logout }) => {
         const token = localStorage.getItem("InventoryAppToken");
         try {
             setMasterLoading(true);
-            // ✅ FIX 2: Pointed to the clean master items repository route
             const { data } = await axios.get("/api/masteritems", {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -82,7 +81,6 @@ const AdminDashboard = ({ logout }) => {
         const token = localStorage.getItem("InventoryAppToken");
         try {
             setReportLoading(true);
-            // ✅ FIX 3A: Aligned endpoint request with your live '/api/history' route
             const { data: historyData } = await axios.get("/api/history", {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -112,17 +110,13 @@ const AdminDashboard = ({ logout }) => {
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             if (data.status === "success") {
-                // 🎯 INSTANT UI FEEDBACK: Immediately remove this transaction from state
                 setAdminHistory((prev) => ({
                     ...prev,
                     usage: prev.usage.filter((item) => item.TxnID !== txnId)
                 }));
-
-                // Re-fetch in background to keep all numbers 100% synced
                 fetchHistory();
             }
         } catch (error) {
-            // Show the actual backend message if it fails
             alert(error.response?.data?.error || "Failed to process request. Check connection.");
         } finally {
             setActionLoading(false);
@@ -151,9 +145,57 @@ const AdminDashboard = ({ logout }) => {
             await getAllUsers();
         } catch (err) {
             console.error("Error adding user", err);
-            alert("Failed to add user");
+            alert(err.response?.data?.error || "Failed to add user");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // 🎯 EDIT USER HANDLER
+    const handleUpdateUser = async (e) => {
+        e.preventDefault();
+        const token = localStorage.getItem("InventoryAppToken");
+        try {
+            setActionLoading(true);
+            await axios.put(
+                `/api/admin/users/${editingUser.id}`,
+                {
+                    email: editingUser.email,
+                    location: editingUser.location,
+                    role: editingUser.role
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            alert("User updated successfully");
+            setEditingUser(null);
+            await getAllUsers();
+        } catch (err) {
+            console.error("Error updating user", err);
+            alert(err.response?.data?.error || "Failed to update user");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // 🎯 DELETE USER HANDLER
+    const handleDeleteUser = async (userId, username) => {
+        if (!confirm(`Are you sure you want to remove user "${username}"?`)) return;
+
+        const token = localStorage.getItem("InventoryAppToken");
+        try {
+            setActionLoading(true);
+            await axios.delete(`/api/admin/users/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            setUsers(prev => prev.filter(u => u.id !== userId));
+            await getAllUsers();
+        } catch (err) {
+            console.error("Error deleting user", err);
+            alert(err.response?.data?.error || "Failed to delete user");
+        } finally {
+            setActionLoading(false);
         }
     };
 
@@ -164,11 +206,8 @@ const AdminDashboard = ({ logout }) => {
 
         if (!data || data.length === 0) return alert("No data available to export.");
 
-        // --- 📊 ADD CHART SNAPSHOT IMAGE TO PDF ---
-        // Capture the live canvas base64 image representation directly via React hook refs
         if (chartRef.current) {
             const chartImageBase64 = chartRef.current.toBase64Image();
-            // Inject Image parameters: imageURI, format, x, y, width, height
             doc.addImage(chartImageBase64, "PNG", 14, 25, 180, 75);
         }
 
@@ -189,7 +228,6 @@ const AdminDashboard = ({ logout }) => {
                 : [formattedDate, item.Location_To, item.Item_Name, item.Total_Items];
         });
 
-        // Push startY down to 110 to give the chart image breathing room above the table grid
         doc.autoTable({ 
             head: headers, 
             body: rows, 
@@ -197,7 +235,6 @@ const AdminDashboard = ({ logout }) => {
             theme: "striped"
         });
 
-        // Page 2: Summary Metrics Breakdown
         doc.addPage();
         doc.setFontSize(16);
         doc.text("Inventory Consumption Summary", 14, 20);
@@ -219,10 +256,6 @@ const AdminDashboard = ({ logout }) => {
 
         doc.save(`Global_Report_${type}_${new Date().toLocaleDateString()}.pdf`);
     };
-
-    useEffect(() => {
-        getAllUsers();
-    }, []);
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
@@ -247,16 +280,13 @@ const AdminDashboard = ({ logout }) => {
                         <FileText size={20} /> Master Item List
                     </div>
 
-                    {/* --- REVIEW TASKS TAB --- */}
                     <div
                         onClick={() => setActiveTab("approvals")}
                         className={`p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all ${activeTab === "approvals" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
                     >
                         <div className="flex items-center gap-2">
-                            {/* The Bell Icon with Ping */}
                             <div className="relative">
                                 <Bell size={20} />
-                                {/* Calculate pending tasks on the fly */}
                                 {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
                                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -267,7 +297,6 @@ const AdminDashboard = ({ logout }) => {
                             Review Tasks
                         </div>
                         
-                        {/* Optional: Show exact number badge */}
                         {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length > 0 && (
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${activeTab === "approvals" ? "bg-white text-blue-600" : "bg-red-500 text-white"}`}>
                                 {(adminHistory?.usage || []).filter(log => log.Status === "Pending Delete").length}
@@ -325,18 +354,38 @@ const AdminDashboard = ({ logout }) => {
                                 </form>
                             </div>
 
-                            {/* Access Control List */}
+                            {/* Access Control List with Interactive Edit & Delete Actions */}
                             <div className="bg-white p-8 rounded-4xl shadow-sm border border-slate-100">
                                 <h3 className="font-bold mb-6 text-slate-700">Access Control List</h3>
                                 <div className="space-y-3 max-h-112.5 overflow-y-auto pr-2 custom-scrollbar">
                                     {users.length > 0 ? (
-                                        users.map((u, i) => (
-                                            <div key={`${i}-${u.username}`} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all">
+                                        users.map((u) => (
+                                            <div key={u.id || u.username} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all">
                                                 <div>
                                                     <p className="font-black text-sm text-slate-800">{u.username}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{u.role} • {u.location}</p>
+                                                    <p className="text-xs text-slate-500">{u.email || "No email"}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                                        {u.role} • {u.location}
+                                                    </p>
                                                 </div>
-                                                <div className="bg-white px-3 py-1 rounded-lg text-[10px] font-black text-slate-300 border border-slate-100">ID: {i + 1}</div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => setEditingUser(u)}
+                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                                        title="Edit User"
+                                                    >
+                                                        <Edit3 size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteUser(u.id, u.username)}
+                                                        disabled={actionLoading}
+                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                                        title="Remove User"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))
                                     ) : (
@@ -344,6 +393,79 @@ const AdminDashboard = ({ logout }) => {
                                     )}
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 🎯 EDIT USER MODAL */}
+                {editingUser && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="font-bold text-slate-800 text-lg">Edit Staff Details</h3>
+                                <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-600">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleUpdateUser} className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Username</label>
+                                    <input value={editingUser.username} disabled className="w-full p-3 bg-slate-100 text-slate-500 rounded-xl text-sm font-bold mt-1" />
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Official Email</label>
+                                    <input
+                                        type="email"
+                                        value={editingUser.email || ""}
+                                        onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Role</label>
+                                        <select
+                                            value={editingUser.role}
+                                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                                        >
+                                            {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Location</label>
+                                        <select
+                                            value={editingUser.location}
+                                            onChange={(e) => setEditingUser({ ...editingUser, location: e.target.value })}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+                                        >
+                                            {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingUser(null)}
+                                        className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={actionLoading}
+                                        className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-md shadow-blue-200 transition flex items-center justify-center gap-2"
+                                    >
+                                        <Save size={16} /> Save Changes
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 )}
@@ -401,69 +523,58 @@ const AdminDashboard = ({ logout }) => {
                 )}
 
                 {activeTab === "approvals" && (
-                <div className="animate-in fade-in duration-500 max-w-3xl">
-                    <h1 className="text-2xl font-bold mb-8 text-slate-800">Action Center</h1>
-                    
-                    {/* --- ADMIN REVIEW: PENDING DELETES --- */}
-                    <div className="bg-white p-6 rounded-4xl border border-red-100 shadow-sm mb-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
-                                <AlertTriangle size={20} strokeWidth={2.5} />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-black text-slate-900 tracking-tight">Deletion Requests</h2>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Requires Approval</p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            {/* Filter history to only show Pending Deletes */}
-                            {/* Change history.usage to adminHistory.usage */}
-                            {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").map(log => (
-                                <div key={log.TxnID} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl flex flex-col md:flex-row justify-between md:items-center gap-4">
-                                    
-                                    {/* Info Block */}
-                                    <div className="flex-1">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{log.Location_From}</p>
-                                        <h4 className="text-sm font-black text-slate-800">{log.Item_Name}</h4>
-                                        <p className="text-xs font-bold text-red-500 mt-1">Requested to refund {log.Total_Items} items</p>
-                                        <p className="text-[9px] text-slate-400 mt-1">ID: {log.TxnID} • By: {log.User}</p>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex gap-2 shrink-0">
-                                        <button 
-                                            onClick={() => handleResolveDelete(log.TxnID, "Reject")}
-                                            disabled={actionLoading}
-                                            className="px-4 py-2 bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase active:scale-95 transition hover:bg-slate-300"
-                                        >
-                                            Reject
-                                        </button>
-                                        <button 
-                                            onClick={() => handleResolveDelete(log.TxnID, "Approve")}
-                                            disabled={actionLoading}
-                                            className="px-4 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-red-200 active:scale-95 transition hover:bg-red-600"
-                                        >
-                                            Approve Refund
-                                        </button>
-                                    </div>
+                    <div className="animate-in fade-in duration-500 max-w-3xl">
+                        <h1 className="text-2xl font-bold mb-8 text-slate-800">Action Center</h1>
+                        <div className="bg-white p-6 rounded-4xl border border-red-100 shadow-sm mb-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                                    <AlertTriangle size={20} strokeWidth={2.5} />
                                 </div>
-                            ))}
+                                <div>
+                                    <h2 className="text-lg font-black text-slate-900 tracking-tight">Deletion Requests</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Requires Approval</p>
+                                </div>
+                            </div>
 
-                            {/* Empty State */}
-                            {/* Change history.usage to adminHistory.usage */}
-                            {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").length === 0 && (
-                                <p className="text-center text-xs font-bold text-slate-400 py-8">No pending deletion requests. You're all caught up!</p>
-                            )}
+                            <div className="space-y-3">
+                                {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").map(log => (
+                                    <div key={log.TxnID} className="p-4 bg-slate-50 border border-slate-100 rounded-3xl flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                        <div className="flex-1">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{log.Location_From}</p>
+                                            <h4 className="text-sm font-black text-slate-800">{log.Item_Name}</h4>
+                                            <p className="text-xs font-bold text-red-500 mt-1">Requested to refund {log.Total_Items} items</p>
+                                            <p className="text-[9px] text-slate-400 mt-1">ID: {log.TxnID} • By: {log.User}</p>
+                                        </div>
+
+                                        <div className="flex gap-2 shrink-0">
+                                            <button 
+                                                onClick={() => handleResolveDelete(log.TxnID, "Reject")}
+                                                disabled={actionLoading}
+                                                className="px-4 py-2 bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase active:scale-95 transition hover:bg-slate-300"
+                                            >
+                                                Reject
+                                            </button>
+                                            <button 
+                                                onClick={() => handleResolveDelete(log.TxnID, "Approve")}
+                                                disabled={actionLoading}
+                                                className="px-4 py-2 bg-red-500 text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-red-200 active:scale-95 transition hover:bg-red-600"
+                                            >
+                                                Approve Refund
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {(adminHistory.usage || []).filter(log => log.Status === "Pending Delete").length === 0 && (
+                                    <p className="text-center text-xs font-bold text-slate-400 py-8">No pending deletion requests. You're all caught up!</p>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
                 {activeTab === "reports" && (
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-                        
-                        {/* 1. Header & PDF Export Buttons */}
                         <div className="flex justify-between items-center">
                             <div>
                                 <h1 className="text-2xl font-bold text-slate-800">System Reports & Analytics</h1>
@@ -479,9 +590,7 @@ const AdminDashboard = ({ logout }) => {
                             </div>
                         </div>
 
-                        {/* 2. 📊 THE NEW DYNAMIC ANALYTICS LAYER */}
                         <AnalyticsDashboard />
-                        
                     </div>
                 )}
             </div>
