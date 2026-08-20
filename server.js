@@ -5,6 +5,7 @@ import * as jose from "jose";
 import multer, { memoryStorage } from "multer";
 import nodemailer from "nodemailer";
 import helmet from "helmet"; // 🎯 INJECT THIS: Import the security engine
+import { clientIp, makeTxnId, otpLockedOut, rateLimit, registerOtpFailure } from "./utils/security";
 
 // 1. IMPORT SAMBUNGAN DATABASE KITA
 import sql from "./db";
@@ -17,7 +18,7 @@ import logger from "./utils/logger";
 const PORT = process.env.PORT || 3000;
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 const app = express();
-const upload = multer({ storage: memoryStorage() });
+const upload = multer({ storage: memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }); // 8MB cap prevents memory-exhaustion DoS
 
 // 1. Helmet Security Headers (Kept exactly as is to keep React working)
 app.use(helmet({
@@ -58,6 +59,9 @@ setInterval(() => {
     }
 }, 60000);
 
+// Master switch — clinic OTP second-factor gate (mirrors the per-route flag).
+const otpEnabled = process.env.ENABLE_OTP === 'true';
+
 // Konfigurasi Mesin Penghantar Emel Automatik (Nodemailer Transporter)
 const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -87,7 +91,12 @@ app.get("/api/config", (_req, res) => {
     });
 });
 
-app.get("/api/getusers", async (_req, res) => {
+app.get("/api/getusers", async (req, res) => {
+    // Public only so the login picklist can render. Bounded by rate limiting;
+    // returns strictly display fields (username + location), never credentials.
+    const rl = rateLimit(`getusers:${clientIp(req)}`);
+    if (!rl.allowed) return res.status(429).json({ error: "Too many requests. Try again shortly." });
+
     logger.info("Received getusers request");
     try {
         // 1. Get users matching the frontend structure
@@ -112,11 +121,17 @@ app.get("/api/getusers", async (_req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-    logger.info("Received login request:", req.body);
+    logger.info("Received login request");
     const { username, password, selectedLoc } = req.body;
 
     if (!username || !password || !selectedLoc)
         return res.status(400).json({ error: "Bad Request" });
+
+    // Brute-force guard: bound attempts per username+IP before hitting the DB
+    const rl = rateLimit(`login:${username.toLowerCase()}:${clientIp(req)}`);
+    if (!rl.allowed) {
+        return res.status(429).json({ error: "Too many login attempts. Please try again later." });
+    }
 
     try {
         // 1. Use LOWER() to make the username lookup case-insensitive
@@ -127,17 +142,19 @@ app.post("/api/login", async (req, res) => {
             WHERE LOWER(u.username) = LOWER(${username})
         `;
 
-        if (!user) return res.status(404).json({ error: "User Not Found" });
+        // 2. Uniform message — never reveal whether the username or password was wrong
+        if (!user) return res.status(401).json({ error: "Invalid username or password" });
 
-        // 2. Enforce Location Safety: Selected dropdown must match their database profile
+        // 3. Verify password FIRST (before location) so only a valid password
+        //    can learn anything about the account's real location
+        const isMatch = await Bun.password.verify(password, user.password_hash);
+        if (!isMatch) return res.status(401).json({ error: "Invalid username or password" });
+
+        // 4. Enforce Location Safety: Selected dropdown must match their database profile
         if (user.location_name !== selectedLoc) {
             logger.warn(`User ${username} tried to log into unauthorized location: ${selectedLoc}`);
             return res.status(401).json({ error: "Unauthorized Location Access" });
         }
-
-        // 3. Match the password hash using Bun's native verifier
-        const isMatch = await Bun.password.verify(password, user.password_hash);
-        if (!isMatch) return res.status(401).json({ error: "Unauthorized Password" });
 
         const isClinic = user.role === "Clinic";
         const otpEnabled = process.env.ENABLE_OTP === 'true';
@@ -147,7 +164,7 @@ app.post("/api/login", async (req, res) => {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             
             // Simpan dalam cache memori lokal selama 5 minit
-            otpCache.set(user.email, { otp, expires: Date.now() + 300000 });
+            otpCache.set(user.email, { otp, userId: user.id, location_id: user.location_id, expires: Date.now() + 300000 });
             
             // HANTAR EMEL OTP SEBENAR KEPADA PENGGUNA KLINIK
             // HANTAR EMEL OTP SEBENAR KEPADA PENGGUNA KLINIK
@@ -197,7 +214,8 @@ app.post("/api/login", async (req, res) => {
                 id: user.id,
                 username: user.username,
                 role: user.role,
-                location: user.location_name, 
+                location: user.location_name,
+                location_id: user.location_id,
             };
 
             const token = await new jose.SignJWT(userPayload)
@@ -224,27 +242,49 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.post("/api/verifyotp", async (req, res) => {
-    const { username, otp } = req.body;
+    const { username, otp, password } = req.body;
+
+    // Brute-force guard: bound attempts per username+IP
+    const rl = rateLimit(`verifyotp:${String(username || "").toLowerCase()}:${clientIp(req)}`);
+    if (!rl.allowed) {
+        return res.status(429).json({ error: "Too many verification attempts. Please try again later." });
+    }
 
     try {
         // 🎯 POKA-YOKE: Explicitly select u.id to guarantee it maps to your JavaScript object
         const [user] = await sql`
-            SELECT u.id, u.username, u.email, u.role, l.location_name as location 
+            SELECT u.id, u.username, u.email, u.role, u.password_hash, u.location_id, l.location_name as location 
             FROM users u
             LEFT JOIN locations l ON u.location_id = l.id
             WHERE LOWER(u.username) = LOWER(${username})
         `;
         
-        if (!user) return res.status(401).json({ error: "Unauthorized" });
+        // 🔐 SECURITY FIX (critical): ALWAYS re-verify the password before issuing
+        // ANY token. The frontend already sends `password` here — the old handler
+        // ignored it, which let anyone with a username mint a 9-hour admin token.
+        if (!user) return res.status(401).json({ error: "Invalid username or password" });
+        const passwordMatches = await Bun.password.verify(password || "", user.password_hash);
+        if (!passwordMatches) return res.status(401).json({ error: "Invalid username or password" });
 
+        // OTP brute-force lockout (configurable via ENABLE_OTP). Only enforced for
+        // clinic accounts whose login was routed through the OTP gate.
         if (user.role === "Clinic") {
+            if (otpLockedOut(user.email)) {
+                return res.status(429).json({ error: "Too many failed attempts. Login locked for 15 minutes." });
+            }
+
             const cachedData = otpCache.get(user.email);
             const now = Date.now();
 
             if (!cachedData || cachedData.otp !== otp || now > cachedData.expires) {
+                registerOtpFailure(user.email); // 5 failures → invalidate OTP + lock 15m
                 return res.status(401).json({ error: "Invalid or Expired OTP" });
             }
             otpCache.delete(user.email);
+        } else if (otpEnabled) {
+            // Non-clinic accounts never receive an OTP; reject them at this gate
+            // so verifyotp stays a real second-factor path, not a token factory.
+            return res.status(401).json({ error: "OTP verification is not enabled for this account." });
         }
 
         // Now user.id is 100% guaranteed to exist!
@@ -253,6 +293,7 @@ app.post("/api/verifyotp", async (req, res) => {
             username: user.username,
             role: user.role,
             location: user.location,
+            location_id: user.location_id,
         };
 
         const token = await new jose.SignJWT(userPayload)
@@ -287,13 +328,15 @@ app.post("/api/checkout", jwtAuth, async (req, res) => {
     if (req.user.role !== "Warehouse" && req.user.role !== "Clinic")
         return res.status(403).json({ error: "Forbidden" });
 
-    const { cart, location } = req.body; 
+    const { cart } = req.body; 
 
     try {
         await sql.begin(async (sql) => {
             for (const item of cart) {
                 const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${item.code}`;
-                const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
+                // 🔐 Scoped to the authenticated user's own location — a warehouse/clinic
+                // account can never deduct stock from any location but its own.
+                const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${req.user.location}`;
                 
                 if (!itemData || !locData) continue;
 
@@ -305,7 +348,7 @@ app.post("/api/checkout", jwtAuth, async (req, res) => {
                 `;
 
                 // ✅ FIXED: Generates an absolute unique tracking token row ID key signature per iteration item
-                const checkoutTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+                const checkoutTxnId = makeTxnId();
 
                 // Cipta sejarah transaksi audit log
                 await sql`
@@ -624,7 +667,8 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
         // ACTION A: Record Usage (Clinic Consumption)
         // ==========================================
         if (action === "recordUsage") {
-            const targetLocName = location || req.user.location;
+            // 🔐 Scoped to the authenticated user's own location only.
+            const targetLocName = req.user.location;
             if (!targetLocName) return res.status(400).json({ error: "Missing clinic location identifier." });
 
             await sql.begin(async (sql) => {
@@ -647,7 +691,7 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                     `;
 
                     // ✅ FIXED: Generates unique custom transaction ID string block per row entry item
-                    const usageTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+                    const usageTxnId = makeTxnId();
 
                     await sql`
                         INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
@@ -662,13 +706,20 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
         // ACTION B: Checkout (Initiate QR Transfer)
         // ==========================================
         if (action === "checkout") {
-            const baseTxnId = `TXN-${Math.floor(100000 + Math.random() * 900000)}`;
+            const baseTxnId = makeTxnId();
+
+            // 🔐 Sender is always the authenticated user's own location. A clinic
+            // can transfer stock OUT only from its own balance, never its neighbours'.
+            if (req.body.from && req.body.from !== req.user.location) {
+                return res.status(403).json({ error: "Forbidden: Can only transfer from your own location." });
+            }
+
             await sql.begin(async (sql) => {
                 for (const item of cart) {
                     if (!item.code) continue;
 
                     const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${item.code}`;
-                    const [fromLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.body.from}`;
+                    const [fromLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.user.location}`;
                     const [toLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.body.to}`;
 
                     if (!itemData || !fromLoc || !toLoc) continue;
@@ -695,13 +746,25 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
         // ACTION C: Confirm Receipt (Scan QR Scanner)
         // ==========================================
         if (action === "confirmReceipt") {
+            // 🔐 Only the user whose location is the transfer DESTINATION may scan-in
+            // the receipt. This stops any logged-in account from credit-adding stock
+            // to (or confirming) a transfer addressed to somebody else.
+            const [receivingLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.user.location}`;
+            if (!receivingLoc) return res.status(403).json({ error: "Forbidden: Unknown location." });
+
+            const pendingItems = await sql`
+                SELECT * FROM transactions 
+                WHERE (id = ${txnId} OR id LIKE ${txnId + '_%'}) AND status_override = 'Pending'
+            `;
+
+            if (pendingItems.length === 0) {
+                return res.status(404).json({ error: "No pending transfer matches this receipt." });
+            }
+            if (pendingItems.some((row) => row.location_id !== receivingLoc.id)) {
+                return res.status(403).json({ error: "Forbidden: Receipt is not addressed to your location." });
+            }
+
             await sql.begin(async (sql) => {
-                // ✅ FIXED: Query looks up exact match OR any row starting with batch prefix string sequence
-                const pendingItems = await sql`
-                    SELECT * FROM transactions 
-                    WHERE (id = ${txnId} OR id LIKE ${txnId + '_%'}) AND status_override = 'Pending'
-                `;
-                
                 for (const item of pendingItems) {
                     await sql`
                         INSERT INTO stock (item_id, location_id, quantity)
@@ -727,12 +790,17 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
         if (action === "refillRequest") {
             if (!items || items.length === 0) return res.status(400).json({ error: "No items passed" });
 
+            // 🔐 Validate the location against the authenticated user's own location
+            // (prevents email spoofing with a forged clinic name).
+            const demandLoc = req.user.location;
+            if (!demandLoc) return res.status(400).json({ error: "Missing location identifier." });
+
             const formattedItemList = items.map(i => `• ${i.name} — (Current Balance: ${i.stock})`).join("\n");
             const alertMailOptions = {
                 from: `"KDIP Automation" <${process.env.EMAIL_USER}>`,
                 to: process.env.STOR_MANAGER_EMAIL,
-                subject: `⚠️ REPLENISHMENT DEMAND: [${location}]`,
-                text: `Salam Store Manager,\n\nStock levels at Clinic ${location} have dropped below safety thresholds:\n\n${formattedItemList}`,
+                subject: `⚠️ REPLENISHMENT DEMAND: [${demandLoc}]`,
+                text: `Salam Store Manager,\n\nStock levels at Clinic ${demandLoc} have dropped below safety thresholds:\n\n${formattedItemList}`,
             };
 
             await transporter.sendMail(alertMailOptions);
@@ -747,8 +815,8 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                 for (const item of cart) {
                     if (!item.code) continue;
 
-                    // 1. Fetch the location ID first
-                    const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${location}`;
+                    // 1. Fetch the location ID first — scoped to the user's own location
+                    const [locData] = await sql`SELECT id FROM locations WHERE location_name = ${req.user.location}`;
                     if (!locData) continue; // Safety check: Clinic must exist
 
                     // 2. Try to find the item by exact code OR check if the code exists inside an Alias
@@ -784,7 +852,7 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
                         DO UPDATE SET quantity = stock.quantity + ${totalToIncrement}
                     `;
 
-                    const addTxnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+                    const addTxnId = makeTxnId();
 
                     // ✅ FIXED: Removed from_location_id so it defaults to NULL. 
                     // This ensures the frontend UI correctly registers it as an inbound external addition (+)
@@ -1033,16 +1101,28 @@ app.get("/api/history", jwtAuth, async (req, res) => {
 
 app.get("/api/getinventory", jwtAuth, async (req, res) => {
     try {
-        const rawStock = await sql`
-            SELECT i.item_code as "Item_Code", i.item_name as "Item_Name", 
-                   i.alias as "Alias", l.location_name, s.quantity, s.min_stock as "MinStock"
-            FROM stock s
-            JOIN items i ON s.item_id = i.id
-            JOIN locations l ON s.location_id = l.id
-        `;
+        // 🔐 Scope by role: Admin sees all clinic balances; Warehouse & Clinic see
+        // only their own location. This stops a clinic from reading every clinic's stock.
+        const isAdmin = req.user.role === "Admin";
+        const rows = isAdmin
+            ? await sql`
+                SELECT i.item_code as "Item_Code", i.item_name as "Item_Name", 
+                       i.alias as "Alias", l.location_name, s.quantity, s.min_stock as "MinStock"
+                FROM stock s
+                JOIN items i ON s.item_id = i.id
+                JOIN locations l ON s.location_id = l.id
+              `
+            : await sql`
+                SELECT i.item_code as "Item_Code", i.item_name as "Item_Name", 
+                       i.alias as "Alias", l.location_name, s.quantity, s.min_stock as "MinStock"
+                FROM stock s
+                JOIN items i ON s.item_id = i.id
+                JOIN locations l ON s.location_id = l.id
+                WHERE l.location_name = ${req.user.location}
+              `;
         
         const itemMap = {};
-        for (const row of rawStock) {
+        for (const row of rows) {
             const code = row.Item_Code;
             if (!itemMap[code]) {
                 itemMap[code] = {

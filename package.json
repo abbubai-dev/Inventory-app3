@@ -8,6 +8,7 @@
 		"dev:frontend": "vite",
 		"dev": "conc -n \"BACKEND,FRONTEND\" -c \"cyan,yellow\" \"bun run dev:backend\" \"bun run dev:frontend\"",
 		"build:client": "vite build",
+		"test": "bun test",
 		"start": "bun server.js"
 	},
 	"dependencies": {

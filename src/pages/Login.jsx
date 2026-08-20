@@ -71,7 +71,9 @@ const Login = ({ setUser }) => {
                 localStorage.setItem("InventoryAppUser", JSON.stringify(response.data.user));
                 setUser(response.data.user); 
             } else {
-                alert("OTP sent!");
+                alert("OTP sent! Check your email.");
+                // 🔐 Clear any stale OTP from a previous session before the fresh code
+                setOtp("");
                 setStep(2); // Proceed to OTP screen
             }
         } catch (err) {
