@@ -29,6 +29,7 @@ import {
 	Check,
 	PackageCheck,
 	Bell,
+	X,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Html5QrcodeScanner } from "html5-qrcode";
