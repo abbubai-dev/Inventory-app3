@@ -964,6 +964,69 @@ app.get("/api/getinventory", jwtAuth, async (req, res) => {
     }
 });
 
+// =========================================================================
+// INVENTORY KLINIK LAIN UNTUK ITEM LOW STOCK
+// =========================================================================
+
+app.get("/api/clinic/low-stock-suggestions", jwtAuth, async (req, res) => {
+    const userLocation = req.user.location;
+
+    try {
+        // Query low stock items for current clinic + available stock in other clinics
+        const suggestions = await sql`
+            WITH CurrentClinicLowStock AS (
+                SELECT 
+                    s.item_id,
+                    i.item_code,
+                    i.item_name,
+                    s.quantity AS clinic_qty,
+                    s.min_stock
+                FROM stock s
+                JOIN items i ON s.item_id = i.id
+                JOIN locations l ON s.location_id = l.id
+                WHERE l.location_name = ${userLocation} 
+                  AND s.quantity <= s.min_stock
+            )
+            SELECT 
+                cls.item_code,
+                cls.item_name,
+                cls.clinic_qty,
+                cls.min_stock,
+                l_other.location_name AS neighbor_location,
+                s_other.quantity AS neighbor_qty
+            FROM CurrentClinicLowStock cls
+            JOIN stock s_other ON s_other.item_id = cls.item_id
+            JOIN locations l_other ON s_other.location_id = l_other.id
+            WHERE l_other.location_name != ${userLocation}
+              AND s_other.quantity > s_other.min_stock
+            ORDER BY cls.item_name, s_other.quantity DESC;
+        `;
+
+        // Group results by item for easy rendering in React
+        const grouped = suggestions.reduce((acc, row) => {
+            if (!acc[row.item_code]) {
+                acc[row.item_code] = {
+                    item_code: row.item_code,
+                    item_name: row.item_name,
+                    clinic_qty: row.clinic_qty,
+                    min_stock: row.min_stock,
+                    available_at: []
+                };
+            }
+            acc[row.item_code].available_at.push({
+                location: row.neighbor_location,
+                qty: row.neighbor_qty
+            });
+            return acc;
+        }, {});
+
+        res.json(Object.values(grouped));
+    } catch (err) {
+        console.error("Failed to fetch low stock suggestions:", err);
+        res.status(500).json({ error: "Failed to load stock rebalancing data." });
+    }
+});
+
 // Serve frontend build production
 app.use("/", (req, res, next) => {
     if (req.method !== "GET") return next();

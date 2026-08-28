@@ -34,8 +34,8 @@ import { QRCodeCanvas } from "qrcode.react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
 import { allLocations } from "../utils/constants";
-
 import SkeletonItem from "../components/SkeletonItem";
+import { LowStockRebalancer } from "../components/LowStockRebalancer";
 
 const ClinicDashboard = ({ user, logout }) => {
 	const [view, setView] = useState("menu");
@@ -108,6 +108,22 @@ const ClinicDashboard = ({ user, logout }) => {
 			console.error("Master Sync Failed", error);
 		} finally {
 			setLoading(false);
+		}
+	};
+
+	// Handler when user clicks "Request Transfer" on a suggested item
+	const handleInitiateTransfer = (suggestedItem) => {
+		const q = prompt(`How many units of ${suggestedItem.item_name} do you want to request?`);
+		if (q && !isNaN(q) && Number(q) > 0) {
+			setCart([
+				{
+					name: suggestedItem.item_name,
+					code: suggestedItem.item_code,
+					qty: Number(q),
+				},
+			]);
+			// Auto-switch to transfer view
+			setView("transfer_out");
 		}
 	};
 
@@ -609,6 +625,9 @@ const ClinicDashboard = ({ user, logout }) => {
 
 				{view === "menu" && (
 					<div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+						<LowStockRebalancer onInitiateTransfer={handleInitiateTransfer} />
+
 						{/* Welcome & Stats Header */}
 						<div className="bg-linear-to-r from-blue-600 to-indigo-700 p-6 rounded-4xl text-white shadow-lg shadow-blue-200">
 							<h2 className="text-xl font-bold">
