@@ -35,7 +35,6 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 
 import { allLocations } from "../utils/constants";
 import SkeletonItem from "../components/SkeletonItem";
-import { LowStockRebalancer } from "../components/LowStockRebalancer";
 
 const ClinicDashboard = ({ user, logout }) => {
 	const [view, setView] = useState("menu");
@@ -55,7 +54,13 @@ const ClinicDashboard = ({ user, logout }) => {
 	const [pdfItems, setPdfItems] = useState(null); // To store items found in PDF
 	const [uploadingPDF, setUploadingPDF] = useState(false);
 	const [lowStockItems, setLowStockItems] = useState([]); // Store the actual items
-	const [neighborStockMap, setNeighborStockMap] = useState({});
+	const [neighborStockMap, setNeighborStockMap] = useState({}); 	// BORROW & DISPATCH MODAL STATES
+	const [borrowModalItem, setBorrowModalItem] = useState(null);
+	const [selectedBorrowClinic, setSelectedBorrowClinic] = useState("");
+	const [borrowQty, setBorrowQty] = useState(1);
+
+	const [dispatchModalTxn, setDispatchModalTxn] = useState(null);
+	const [dispatchQty, setDispatchQty] = useState(1);
 
 	const [loading, setLoading] = useState(false);
 
@@ -112,19 +117,77 @@ const ClinicDashboard = ({ user, logout }) => {
 		}
 	};
 
-	// Handler when user clicks "Request Transfer" on a suggested item
+	// Open Borrow Request Modal
 	const handleInitiateTransfer = (suggestedItem) => {
-		const q = prompt(`How many units of ${suggestedItem.item_name} do you want to request?`);
-		if (q && !isNaN(q) && Number(q) > 0) {
-			setCart([
+		const neighbors = neighborStockMap[suggestedItem.item_code] || [];
+		if (neighbors.length === 0) {
+			return alert("No neighboring clinics have surplus stock for this item.");
+		}
+		
+		setBorrowModalItem(suggestedItem);
+		setSelectedBorrowClinic(neighbors[0]?.location || "");
+		// Default quantity gap calculation
+		const current = Number(suggestedItem.clinic_qty || 0);
+		const min = Number(suggestedItem.min_stock || 0);
+		setBorrowQty(Math.max(1, min - current));
+	};
+
+	// Submit Borrow Request
+	const submitBorrowRequest = async (e) => {
+		e.preventDefault();
+		if (!borrowModalItem || !selectedBorrowClinic || borrowQty <= 0) return;
+
+		const token = localStorage.getItem("InventoryAppToken");
+		try {
+			setActionLoading(true);
+			const { data } = await axios.post(
+				"/api/clinicaction",
 				{
-					name: suggestedItem.item_name,
-					code: suggestedItem.item_code,
-					qty: Number(q),
+					action: "requestBorrow",
+					itemCode: borrowModalItem.item_code,
+					qty: Number(borrowQty),
+					targetLocation: selectedBorrowClinic
 				},
-			]);
-			// Auto-switch to transfer view
-			setView("transfer_out");
+				{ headers: { Authorization: `Bearer ${token}` } }
+			);
+
+			if (data.status === "success") {
+				alert(`Borrow request sent to ${selectedBorrowClinic}!`);
+				setBorrowModalItem(null);
+				refreshData();
+			}
+		} catch (err) {
+			alert(err.response?.data?.error || "Failed to send borrow request.");
+		} finally {
+			setActionLoading(false);
+		}
+	};
+
+	// Submit Approved Dispatch
+	const submitApproveDispatch = async (e) => {
+		e.preventDefault();
+		if (!dispatchModalTxn || dispatchQty <= 0) return;
+
+		const token = localStorage.getItem("InventoryAppToken");
+		try {
+			setActionLoading(true);
+			await axios.post(
+				"/api/clinicaction",
+				{
+					action: "approveBorrow",
+					txnId: dispatchModalTxn.TxnID,
+					approvedQty: Number(dispatchQty)
+				},
+				{ headers: { Authorization: `Bearer ${token}` } }
+			);
+
+			alert(`Stock dispatched (${dispatchQty} units)!`);
+			setDispatchModalTxn(null);
+			refreshData();
+		} catch (err) {
+			alert(err.response?.data?.error || "Failed to dispatch stock.");
+		} finally {
+			setActionLoading(false);
 		}
 	};
 
@@ -1514,6 +1577,19 @@ const ClinicDashboard = ({ user, logout }) => {
 																		Confirm Receipt
 																	</button>
 																)}
+
+																{/* APPROVE BORROW REQUEST (For Surplus Clinic) */}
+																{log.Status === "Pending Borrow" && String(log.Location_From) === String(user.location) && (
+																	<button 
+																		onClick={() => {
+																			setDispatchModalTxn(log);
+																			setDispatchQty(log.Total_Items); // Pre-fill with requested amount
+																		}}
+																		className="w-full py-3 bg-orange-600 text-white text-xs font-black uppercase rounded-2xl shadow-md hover:bg-orange-700 transition"
+																	>
+																		Approve & Dispatch Stock
+																	</button>
+																)}
 															</div>
 														);
 													})}
@@ -1693,6 +1769,143 @@ const ClinicDashboard = ({ user, logout }) => {
 					</div>
 				</div>
 			)}
+
+			{/* 🎯 1. BORROW REQUEST DROPDOWN MODAL */}
+			{borrowModalItem && (
+				<div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+					<div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 space-y-5">
+						<div className="flex justify-between items-center">
+							<div>
+								<h3 className="font-black text-slate-900 text-xl tracking-tight">Request Borrow Stock</h3>
+								<p className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Tap Neighbor Surplus</p>
+							</div>
+							<button onClick={() => setBorrowModalItem(null)} className="p-2 text-slate-400 hover:text-slate-600">
+								<X size={20} />
+							</button>
+						</div>
+
+						<div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+							<p className="text-xs font-mono font-bold text-slate-400">#{borrowModalItem.item_code}</p>
+							<h4 className="font-black text-slate-800 text-sm">{borrowModalItem.item_name}</h4>
+						</div>
+
+						<form onSubmit={submitBorrowRequest} className="space-y-4">
+							<div>
+								<label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+									Select Donor Clinic
+								</label>
+								<select
+									value={selectedBorrowClinic}
+									onChange={(e) => setSelectedBorrowClinic(e.target.value)}
+									className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-orange-500"
+									required
+								>
+									{(neighborStockMap[borrowModalItem.item_code] || []).map((n) => (
+										<option key={n.location} value={n.location}>
+											{n.location} ({n.qty} available)
+										</option>
+									))}
+								</select>
+							</div>
+
+							<div>
+								<label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+									Quantity Needed
+								</label>
+								<input
+									type="number"
+									min="1"
+									value={borrowQty}
+									onChange={(e) => setBorrowQty(e.target.value)}
+									className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-500"
+									required
+								/>
+							</div>
+
+							<div className="flex gap-3 pt-2">
+								<button
+									type="button"
+									onClick={() => setBorrowModalItem(null)}
+									className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold text-xs uppercase"
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={actionLoading}
+									className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-orange-200 hover:bg-orange-700 transition"
+								>
+									{actionLoading ? "Sending..." : "Send Request"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+
+			{/* 🎯 2. DISPATCH & EDIT QUANTITY MODAL (FOR SURPLUS CLINIC) */}
+			{dispatchModalTxn && (
+				<div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+					<div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 space-y-5">
+						<div className="flex justify-between items-center">
+							<div>
+								<h3 className="font-black text-slate-900 text-xl tracking-tight">Approve Stock Borrow</h3>
+								<p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+									Requested by {dispatchModalTxn.Location_To}
+								</p>
+							</div>
+							<button onClick={() => setDispatchModalTxn(null)} className="p-2 text-slate-400 hover:text-slate-600">
+								<X size={20} />
+							</button>
+						</div>
+
+						<div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+							<h4 className="font-black text-slate-800 text-sm">{dispatchModalTxn.Item_Name}</h4>
+							<p className="text-xs text-slate-500 mt-1">
+								Requested Amount: <b className="text-slate-800">{dispatchModalTxn.Total_Items} units</b>
+							</p>
+						</div>
+
+						<form onSubmit={submitApproveDispatch} className="space-y-4">
+							<div>
+								<label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+									Dispatch Quantity (Adjust if needed)
+								</label>
+								<input
+									type="number"
+									min="1"
+									max={dispatchModalTxn.Total_Items}
+									value={dispatchQty}
+									onChange={(e) => setDispatchQty(e.target.value)}
+									className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-blue-600 outline-none focus:ring-2 focus:ring-blue-500"
+									required
+								/>
+								<p className="text-[10px] text-slate-400 mt-1">
+									If your shelf cannot spare the full request, enter the actual amount you are sending.
+								</p>
+							</div>
+
+							<div className="flex gap-3 pt-2">
+								<button
+									type="button"
+									onClick={() => setDispatchModalTxn(null)}
+									className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold text-xs uppercase"
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={actionLoading}
+									className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-blue-200 hover:bg-blue-700 transition"
+								>
+									{actionLoading ? "Dispatching..." : "Approve & Dispatch"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+			// Place MODAL above this
 		</div>
 	);
 };

@@ -564,7 +564,7 @@ app.post("/api/adminaction", jwtAuth, async (req, res) => {
 });
 
 // =========================================================================
-// CLINIC BACKEND ACTIONS (RECORD USAGE, TRANSEFER, CONFIRM RECEIPT)
+// CLINIC BACKEND ACTIONS (RECORD USAGE, TRANSEFER, CONFIRM RECEIPT, LOW STOCK EMAIL REQUEST, DIGITAL RECEIPT, REQUEST DELETE, REQUEST BORROW, APPROVE BORROW)
 // =========================================================================
 
 app.post("/api/clinicaction", jwtAuth, async (req, res) => {
@@ -780,6 +780,70 @@ app.post("/api/clinicaction", jwtAuth, async (req, res) => {
             `;
             
             return res.json({ status: "success" });
+        }
+
+        // ==========================================
+        // ACTION G: Request Borrow (Pull Request)
+        // ==========================================
+        if (action === "requestBorrow") {
+            const { itemCode, qty, targetLocation } = req.body; // targetLocation = Clinic with surplus (e.g. KPH)
+
+            const [itemData] = await sql`SELECT id FROM items WHERE item_code = ${itemCode}`;
+            const [fromLoc] = await sql`SELECT id FROM locations WHERE location_name = ${targetLocation}`; // Surplus Clinic
+            const [toLoc] = await sql`SELECT id FROM locations WHERE location_name = ${req.user.location}`;  // Low Stock Clinic
+
+            if (!itemData || !fromLoc || !toLoc) {
+                return res.status(400).json({ error: "Invalid locations or item code." });
+            }
+
+            const txnId = `REQ-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+            await sql`
+                INSERT INTO transactions (id, item_id, location_id, from_location_id, user_id, quantity, operation, status_override)
+                VALUES (${txnId}, ${itemData.id}, ${toLoc.id}, ${fromLoc.id}, ${req.user.id}, ${Number(qty)}, 'transfer', 'Pending Borrow')
+            `;
+
+            return res.json({ status: "success", message: "Borrow request sent to neighbor clinic." });
+        }
+
+        // ==========================================
+        // ACTION H: Approve Borrow (With Editable Quantity)
+        // ==========================================
+        if (action === "approveBorrow") {
+            const { txnId, approvedQty } = req.body;
+
+            try {
+                await sql.begin(async (sql) => {
+                    const [txn] = await sql`
+                        SELECT item_id, from_location_id, quantity 
+                        FROM transactions 
+                        WHERE id = ${txnId} AND status_override = 'Pending Borrow'
+                    `;
+
+                    if (!txn) throw new Error("Request not found or already processed.");
+
+                    // Use the adjusted quantity if provided, otherwise default to original
+                    const finalQty = Math.max(1, Number(approvedQty) || Number(txn.quantity));
+
+                    // 1. Deduct adjusted quantity from SURPLUS clinic (from_location_id)
+                    await sql`
+                        UPDATE stock SET quantity = quantity - ${finalQty}
+                        WHERE item_id = ${txn.item_id} AND location_id = ${txn.from_location_id}
+                    `;
+
+                    // 2. Update transaction quantity and status to 'Pending' so recipient can confirm
+                    await sql`
+                        UPDATE transactions 
+                        SET quantity = ${finalQty}, status_override = 'Pending', timestamp = NOW()
+                        WHERE id = ${txnId}
+                    `;
+                });
+
+                return res.json({ status: "success" });
+            } catch (err) {
+                console.error("Failed to approve borrow:", err);
+                return res.status(500).json({ error: "Failed to dispatch stock." });
+            }
         }
 
         res.status(400).json({ error: "Unknown action parameter profile value" });
