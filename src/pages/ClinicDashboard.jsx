@@ -583,10 +583,10 @@ const ClinicDashboard = ({ user, logout }) => {
 			// Security Guard
 			if (!(iAmSender || iAmReceiver)) return false;
 
-			// ✅ TAB FILTER (The logic that simplifies our data)
+			// TAB FILTER (The logic that simplifies our data)
 			if (activeTab === "usage" && !["Used", "Pending Delete"].includes(log.Status)) return false;
 			if (activeTab === "receipts" && log.Status !== "Add") return false;
-			if (activeTab === "transfers" && !["Pending", "TransferIn", "TransferOut"].includes(log.Status)) return false;
+			if (activeTab === "transfers" && !["Pending", "Pending Borrow", "TransferIn", "TransferOut"].includes(log.Status)) return false;
 
 			// Date Filter
 			const itemDate = new Date(log.Timestamp || log.CreatedAt).toISOString().split("T")[0];
@@ -624,24 +624,32 @@ const ClinicDashboard = ({ user, logout }) => {
 	}, [view]);
 
 	const hasInboundPending = useMemo(() => {
-		// 1. Combine everything, just like your History View does
+		// 1. Combine all history logs
 		const allLogs = [
 			...(history?.transfers || []),
 			...(history?.usage || []),
-			...(history?.transactions || []) // Added this as a safety net
+			...(history?.transactions || [])
 		];
 
 		if (allLogs.length === 0) return false;
 
-		// 2. Look for any row that is: Pending AND meant for ME
+		// 2. Check if there are incoming stock transfers OR incoming borrow requests
 		return allLogs.some(log => {
-			const dest = (log.Location_To || log.To || "").toString().trim().toUpperCase();
 			const status = (log.Status || "").toString().trim();
 			const myLoc = String(user.location || "").trim().toUpperCase();
 
-			return dest === myLoc && status === "Pending";
+			const dest = (log.Location_To || log.To || "").toString().trim().toUpperCase();
+			const from = (log.Location_From || log.From || "").toString().trim().toUpperCase();
+
+			// Condition A: Someone is sending stock TO me (Regular Transfer)
+			const isReceivingTransfer = dest === myLoc && status === "Pending";
+
+			// Condition B: Someone is requesting to borrow stock FROM me (Borrow Request)
+			const isIncomingBorrowRequest = from === myLoc && status === "Pending Borrow";
+
+			return isReceivingTransfer || isIncomingBorrowRequest;
 		});
-	}, [history, user.location]); // Watch the WHOLE history object
+	}, [history, user.location]);
 
 	return (
 		<div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-indigo-100 flex flex-col font-sans">
@@ -1906,7 +1914,7 @@ const ClinicDashboard = ({ user, logout }) => {
 					</div>
 				</div>
 			)}
-			// Place MODAL above this
+			{/* place modal above this */}
 		</div>
 	);
 };

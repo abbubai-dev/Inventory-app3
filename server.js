@@ -988,7 +988,9 @@ app.get("/api/history", jwtAuth, async (req, res) => {
         `;
 
         const usage = logs.filter(log => ["Used", "Pending Delete"].includes(log.Status));
-        const transfers = logs.filter(log => ["Pending", "TransferIn", "TransferOut", "Add"].includes(log.Status));
+        const transfers = logs.filter(log => 
+            ["Pending", "Pending Borrow", "TransferIn", "TransferOut", "Add"].includes(log.Status)
+        );
 
         res.json({ transfers, usage });
     } catch (err) {
