@@ -490,14 +490,18 @@ const AdminDashboard = ({ logout }) => {
                                 <div className="p-20 text-center text-sm font-bold text-slate-400">Loading Master Catalog...</div>
                             ) : (
                                 <table className="w-full text-left border-collapse">
+                                    {/* Table Header */}
                                     <thead className="bg-slate-50">
                                         <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                                             <th className="p-5">SPPA Code</th>
                                             <th className="p-5">Item Name</th>
                                             <th className="p-5">Alias</th>
                                             <th className="p-5 text-center">Unit</th>
+                                            <th className="p-5 text-center">Min Stock Threshold</th>
                                         </tr>
                                     </thead>
+
+                                    {/* Table Body Row */}
                                     <tbody className="divide-y divide-slate-50">
                                         {masterList
                                             .filter(item => 
@@ -512,6 +516,29 @@ const AdminDashboard = ({ logout }) => {
                                                     <td className="p-5 text-[10px] text-slate-400 italic max-w-xs truncate">{item.Alias || "-"}</td>
                                                     <td className="p-5 text-center">
                                                         <span className="bg-slate-100 text-slate-600 text-[10px] font-black px-2.5 py-1 rounded-lg">x{item.Unit || 1}</span>
+                                                    </td>
+                                                    
+                                                    {/* EDITABLE MIN STOCK INPUT */}
+                                                    <td className="p-5 text-center">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            defaultValue={item.MinStock || 5}
+                                                            onBlur={async (e) => {
+                                                                const newMin = Number(e.target.value);
+                                                                if (newMin === item.MinStock) return;
+                                                                const token = localStorage.getItem("InventoryAppToken");
+                                                                try {
+                                                                    await axios.put("/api/admin/masteritems/minstock", {
+                                                                        item_code: item.Item_Code,
+                                                                        min_stock: newMin
+                                                                    }, { headers: { Authorization: `Bearer ${token}` } });
+                                                                } catch (err) {
+                                                                    alert("Failed to update min stock threshold");
+                                                                }
+                                                            }}
+                                                            className="w-16 p-2 text-center bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        />
                                                     </td>
                                                 </tr>
                                             ))}

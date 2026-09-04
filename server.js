@@ -432,15 +432,47 @@ app.get("/api/masteritems", jwtAuth, async (req, res) => {
     if (req.user.role !== "Admin") return res.status(403).json({ error: "Forbidden" });
     try {
         const items = await sql`
-            SELECT item_code as "Item_Code", item_name as "Item_Name", 
-                   alias as "Alias", unit_multiplier as "Unit" 
-            FROM items
-            ORDER BY item_code ASC
+            SELECT 
+                i.item_code as "Item_Code", 
+                i.item_name as "Item_Name", 
+                i.alias as "Alias", 
+                i.unit_multiplier as "Unit",
+                COALESCE(MAX(s.min_stock), 5) as "MinStock"
+            FROM items i
+            LEFT JOIN stock s ON s.item_id = i.id
+            GROUP BY i.id, i.item_code, i.item_name, i.alias, i.unit_multiplier
+            ORDER BY i.item_code ASC
         `;
         res.json(items);
     } catch (err) {
         logger.error("Failed to fetch master item repository:", err.message);
         res.status(500).json({ error: "Database Error" });
+    }
+});
+
+// 🎯 UPDATE MINIMUM STOCK THRESHOLD FOR MASTER ITEM
+app.put("/api/admin/masteritems/minstock", jwtAuth, async (req, res) => {
+    if (req.user.role !== "Admin") {
+        return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+
+    const { item_code, min_stock } = req.body;
+
+    if (!item_code || min_stock === undefined || min_stock < 0) {
+        return res.status(400).json({ error: "Invalid item code or minimum stock value." });
+    }
+
+    try {
+        await sql`
+            UPDATE stock
+            SET min_stock = ${Number(min_stock)}
+            WHERE item_id = (SELECT id FROM items WHERE item_code = ${item_code})
+        `;
+
+        return res.json({ status: "success", message: "Minimum stock threshold updated across clinics." });
+    } catch (err) {
+        console.error("Failed to update min_stock:", err);
+        return res.status(500).json({ error: "Failed to update minimum stock threshold." });
     }
 });
 
