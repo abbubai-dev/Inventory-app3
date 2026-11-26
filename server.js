@@ -1217,6 +1217,11 @@ app.use(errorHandler);
 try {
     app.listen(PORT, () => {
         logger.info(`InventoryApp running natively on Postgres & Bun layer via port ${PORT}`);
+        if (process.env.ENABLE_OTP !== "true") {
+            logger.warn(
+                "ENABLE_OTP is not \"true\" — clinic logins will skip the email second factor. Set it in production.",
+            );
+        }
     });
 } catch (error) {
     logger.error("Error starting server:", error);
